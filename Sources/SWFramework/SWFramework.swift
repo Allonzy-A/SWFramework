@@ -262,6 +262,7 @@ public class SWFramework {
                         }
                     } else {
                         print("Push notifications not authorized")
+                        // Если пользователь отказался, токен не нужен
                         completion(nil)
                     }
                 }
@@ -286,7 +287,12 @@ public class SWFramework {
             if !tokenReceived {
                 print("APNS token wait timed out after \(timeout) seconds")
                 NotificationCenter.default.removeObserver(observer)
-                completion(nil)
+                
+                // Используем заглушку вместо nil только если был таймаут при получении токена
+                // (пользователь уже дал разрешение, но токен не пришел вовремя)
+                let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                print("Using fallback APNS token: \(fallbackToken.prefix(8))...")
+                completion(fallbackToken)
             }
         }
     }
@@ -298,9 +304,12 @@ public class SWFramework {
                 completion(token)
             } catch {
                 print("Error getting attribution token: \(error)")
+                // При ошибке получения ATT токена возвращаем nil
                 completion(nil)
             }
         } else {
+            // На устройствах с iOS ниже 14.3 токен недоступен
+            print("ATT token not available on iOS < 14.3")
             completion(nil)
         }
     }
