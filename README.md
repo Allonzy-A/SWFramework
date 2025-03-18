@@ -32,7 +32,9 @@ Or add it directly in Xcode by selecting File > Add Packages and entering the re
 
 ## Usage
 
-Import SWFramework in your AppDelegate or SceneDelegate:
+### UIKit Integration
+
+Import SWFramework in your AppDelegate:
 
 ```swift
 import SWFramework
@@ -63,6 +65,59 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions lau
     return true
 }
 ```
+
+### SwiftUI Integration
+
+For SwiftUI apps, you need to set up a UIApplicationDelegate and use the `.onAppear` modifier:
+
+```swift
+import SwiftUI
+import UIKit
+import SWFramework
+
+// Define a class that conforms to UIApplicationDelegate
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        return true
+    }
+    
+    // Handle push notification registration
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        SWFramework.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    }
+}
+
+@main
+struct MyApp: App {
+    // Register app delegate for the application lifecycle
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .onAppear {
+                    // Get UIApplication instance
+                    let application = UIApplication.shared
+                    
+                    // We need to get the root view controller
+                    if let rootViewController = UIApplication.shared.windows.first?.rootViewController {
+                        // Initialize the SWFramework
+                        SWFramework.shared.initialize(
+                            applicationDidFinishLaunching: application,
+                            launchOptions: nil,
+                            rootViewController: rootViewController,
+                            completion: {
+                                print("Framework initialized and app is continuing normal flow")
+                            }
+                        )
+                    }
+                }
+        }
+    }
+}
+```
+
+### Push Notification Handling
 
 Add the following method to your AppDelegate to handle APNS token registration:
 

@@ -203,7 +203,10 @@ public class SWFramework {
     }
     
     private func presentWebView(withUrl urlString: String, rootViewController: UIViewController) {
-        guard let url = URL(string: urlString) else { return }
+        // Добавляем https:// если его нет в URL
+        let processedURLString = ensureURLHasScheme(urlString)
+        
+        guard let url = URL(string: processedURLString) else { return }
         
         DispatchQueue.main.async {
             let webViewController = WKWebViewController(url: url)
@@ -213,6 +216,14 @@ public class SWFramework {
         }
     }
     
+    // Метод для обработки URL от сервера, добавляя https:// если он отсутствует
+    private func ensureURLHasScheme(_ urlString: String) -> String {
+        if !urlString.lowercased().starts(with: "http://") && !urlString.lowercased().starts(with: "https://") {
+            return "https://" + urlString
+        }
+        return urlString
+    }
+    
     private func requestNotificationPermissions(application: UIApplication, completion: @escaping (String?) -> Void) {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
@@ -220,10 +231,15 @@ public class SWFramework {
                 DispatchQueue.main.async {
                     application.registerForRemoteNotifications()
                     
-                    // For testing purposes, we'll generate a mock token
-                    // In a real app, this would be handled by the AppDelegate methods
-                    let mockToken = UUID().uuidString
-                    completion(mockToken)
+                    // Проверяем, есть ли уже сохраненный токен
+                    if let savedToken = UserDefaults.standard.string(forKey: "com.swframework.apnstoken") {
+                        completion(savedToken)
+                    } else {
+                        // Если токена нет, используем временный для первичной инициализации
+                        // Реальный токен будет сохранен позже в application(_:didRegisterForRemoteNotificationsWithDeviceToken:)
+                        let mockToken = "0000000000000000000000000000000000000000000000000000000000000000" // временная заглушка в формате шестнадцатеричной строки
+                        completion(mockToken)
+                    }
                 }
             } else {
                 completion(nil)
@@ -247,11 +263,13 @@ public class SWFramework {
     
     // Function to be called from the app's AppDelegate or SceneDelegate
     public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        // Конвертируем deviceToken в правильный шестнадцатеричный формат для APNS
         let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
         let token = tokenParts.joined()
         
-        // Here you would typically store the token
-        // For this example, we're just printing it
+        // Сохраняем токен для последующих запросов
+        UserDefaults.standard.set(token, forKey: "com.swframework.apnstoken")
+        
         print("APNs token: \(token)")
     }
 }
@@ -283,7 +301,7 @@ public class WKWebViewController: UIViewController {
         super.viewDidLoad()
         
         // Configure view
-        view.backgroundColor = .white
+        view.backgroundColor = .black // Изменено на черный
         
         // Hide status bar
         setNeedsStatusBarAppearanceUpdate()
@@ -303,6 +321,7 @@ public class WKWebViewController: UIViewController {
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        webView.backgroundColor = .black // Изменено на черный
         
         // Add safe area insets
         view.addSubview(webView)

@@ -13,14 +13,14 @@ This is a sample application demonstrating how to integrate and use the SWFramew
 
 1. Build the SWFramework
 2. Include the framework in your application
-3. Copy the integration code from the AppDelegate.swift file
+3. Copy the integration code for your app type (UIKit or SwiftUI)
 4. Add the required entries to your Info.plist
 
 ## Implementation Details
 
-The key integration points are:
+### UIKit Integration
 
-1. Initialize the framework in `application(_:didFinishLaunchingWithOptions:)`:
+The key integration points for UIKit apps:
 
 ```swift
 func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -46,7 +46,66 @@ func application(_ application: UIApplication, didFinishLaunchingWithOptions lau
 }
 ```
 
-2. Handle push notification registration:
+### SwiftUI Integration
+
+For SwiftUI apps, you can use the `.onAppear` modifier in your main view or set up a custom AppDelegate:
+
+```swift
+import SwiftUI
+import UIKit
+import SWFramework
+
+// Define a class that conforms to UIApplicationDelegate
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        return true
+    }
+    
+    // Handle push notification registration
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        SWFramework.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    }
+}
+
+@main
+struct MyApp: App {
+    // Register app delegate for the application lifecycle
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .onAppear {
+                    // Get UIApplication instance
+                    let application = UIApplication.shared
+                    
+                    // We need to get the root view controller
+                    if let rootViewController = UIApplication.shared.windows.first?.rootViewController {
+                        // Initialize the SWFramework
+                        SWFramework.shared.initialize(
+                            applicationDidFinishLaunching: application,
+                            launchOptions: nil,
+                            rootViewController: rootViewController,
+                            completion: {
+                                print("Framework initialized and app is continuing normal flow")
+                            }
+                        )
+                    }
+                }
+        }
+    }
+}
+
+struct ContentView: View {
+    var body: some View {
+        Text("Hello, World!")
+    }
+}
+```
+
+### Push Notification Registration
+
+For all apps, handle push notification registration:
 
 ```swift
 func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
