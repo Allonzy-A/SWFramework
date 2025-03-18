@@ -22,13 +22,7 @@ A Swift framework for iOS applications that collects device data, communicates w
 
 ### Swift Package Manager
 
-Add the following dependency to your Package.swift file:
-
-```swift
-.package(url: "https://github.com/yourusername/SWFramework.git", from: "1.0.0")
-```
-
-Or add it directly in Xcode by selecting File > Add Packages and entering the repository URL.
+Add it directly in Xcode by selecting File > Add Packages and entering the repository URL.
 
 ## Usage
 
