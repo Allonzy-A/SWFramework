@@ -81,18 +81,27 @@ public class SWFramework {
         let dataCollectionGroup = DispatchGroup()
         var deviceData = DeviceData()
         
+        // Устанавливаем bundle ID сразу, так как он всегда доступен
+        deviceData.bundleId = Bundle.main.bundleIdentifier
+        
         // Set up timer for data collection timeout
         let timer = DispatchSource.makeTimerSource()
         timer.schedule(deadline: .now() + timeoutInterval)
         timer.setEventHandler {
-            dataCollectionGroup.leave()
+            // Завершаем сбор данных по таймауту
+            print("Data collection timeout reached")
+            dataCollectionGroup.leave() // Для APNS
+            dataCollectionGroup.leave() // Для ATT
         }
         
-        // Collect APNS token
+        // Collect APNS token - даем приоритет и максимум времени
         dataCollectionGroup.enter()
         requestNotificationPermissions(application: applicationDidFinishLaunching) { token in
             if let token = token {
                 deviceData.apnsToken = token
+                print("APNS token collected: \(token.prefix(8))...")
+            } else {
+                print("Failed to collect APNS token")
             }
             dataCollectionGroup.leave()
         }
@@ -101,11 +110,9 @@ public class SWFramework {
         dataCollectionGroup.enter()
         getAttributionToken { token in
             deviceData.attToken = token
+            print("ATT token collected: \(token?.prefix(8) ?? "nil")...")
             dataCollectionGroup.leave()
         }
-        
-        // Set bundle ID
-        deviceData.bundleId = Bundle.main.bundleIdentifier
         
         // Start timer
         timer.resume()
@@ -113,6 +120,9 @@ public class SWFramework {
         // Wait for data collection or timeout
         dataCollectionGroup.notify(queue: .main) {
             timer.cancel()
+            // Логируем собранные данные для отладки
+            print("All data collected - sending to server")
+            
             self.sendDataToServer(domain: domain, deviceData: deviceData) { responseUrl in
                 if let url = responseUrl, !url.isEmpty {
                     // Save URL for future launches
@@ -225,23 +235,57 @@ public class SWFramework {
     }
     
     private func requestNotificationPermissions(application: UIApplication, completion: @escaping (String?) -> Void) {
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            if granted {
+        // Получаем текущие настройки уведомлений
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            // Если уведомления уже разрешены, просто регистрируемся
+            if settings.authorizationStatus == .authorized {
                 DispatchQueue.main.async {
                     application.registerForRemoteNotifications()
                     
-                    // Проверяем, есть ли уже сохраненный токен
-                    if let savedToken = UserDefaults.standard.string(forKey: "com.swframework.apnstoken") {
-                        completion(savedToken)
-                    } else {
-                        // Если токена нет, используем временный для первичной инициализации
-                        // Реальный токен будет сохранен позже в application(_:didRegisterForRemoteNotificationsWithDeviceToken:)
-                        let mockToken = "0000000000000000000000000000000000000000000000000000000000000000" // временная заглушка в формате шестнадцатеричной строки
-                        completion(mockToken)
+                    // Даем больше времени на получение токена
+                    self.waitForAPNSToken(timeout: 7.0) { token in
+                        completion(token)
                     }
                 }
             } else {
+                // Если разрешения нет, запрашиваем его
+                let center = UNUserNotificationCenter.current()
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                    if granted {
+                        DispatchQueue.main.async {
+                            application.registerForRemoteNotifications()
+                            
+                            // Даем время на получение токена после запроса разрешения
+                            self.waitForAPNSToken(timeout: 7.0) { token in
+                                completion(token)
+                            }
+                        }
+                    } else {
+                        print("Push notifications not authorized")
+                        completion(nil)
+                    }
+                }
+            }
+        }
+    }
+    
+    // Функция ожидания получения APNS токена с таймаутом
+    private func waitForAPNSToken(timeout: TimeInterval, completion: @escaping (String?) -> Void) {
+        var tokenReceived = false
+        
+        // Создаем observer для нотификации о получении токена
+        let observer = NotificationCenter.default.addObserver(forName: Notification.Name("APNSTokenReceived"), object: nil, queue: .main) { notification in
+            if let token = notification.userInfo?["token"] as? String {
+                tokenReceived = true
+                completion(token)
+            }
+        }
+        
+        // Устанавливаем таймер для ограничения времени ожидания
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+            if !tokenReceived {
+                print("APNS token wait timed out after \(timeout) seconds")
+                NotificationCenter.default.removeObserver(observer)
                 completion(nil)
             }
         }
@@ -267,10 +311,14 @@ public class SWFramework {
         let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
         let token = tokenParts.joined()
         
-        // Сохраняем токен для последующих запросов
-        UserDefaults.standard.set(token, forKey: "com.swframework.apnstoken")
+        print("APNs token received: \(token.prefix(8))...")
         
-        print("APNs token: \(token)")
+        // Отправляем уведомление о получении токена
+        NotificationCenter.default.post(
+            name: Notification.Name("APNSTokenReceived"),
+            object: nil,
+            userInfo: ["token": token]
+        )
     }
 }
 
