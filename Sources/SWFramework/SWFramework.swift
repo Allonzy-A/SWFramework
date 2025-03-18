@@ -262,8 +262,10 @@ public class SWFramework {
                         }
                     } else {
                         print("Push notifications not authorized")
-                        // Если пользователь отказался, токен не нужен
-                        completion(nil)
+                        // Используем заглушку, когда пользователь отказался от push-уведомлений
+                        let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                        print("Using fallback APNS token (not authorized): \(fallbackToken.prefix(8))...")
+                        completion(fallbackToken)
                     }
                 }
             }
