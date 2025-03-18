@@ -218,7 +218,7 @@ public class SWFramework {
                             }
                         }
                     } else {
-                        let fallbackToken = _x2("30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030")
+                        let fallbackToken = self._x2("30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030")
                         completion(fallbackToken)
                     }
                 }
@@ -229,8 +229,8 @@ public class SWFramework {
     private func _m1(_ t1: TimeInterval, completion: @escaping (String?) -> Void) {
         var _tr1 = false
         
-        let _ob1 = NotificationCenter.default.addObserver(forName: Notification.Name(_x2("41504e53546f6b656e52656365697665")), object: nil, queue: .main) { notification in
-            if let token = notification.userInfo?[_x2("746f6b656e")] as? String {
+        let _ob1 = NotificationCenter.default.addObserver(forName: Notification.Name(self._x2("41504e53546f6b656e52656365697665")), object: nil, queue: .main) { notification in
+            if let token = notification.userInfo?[self._x2("746f6b656e")] as? String {
                 _tr1 = true
                 completion(token)
             }
@@ -240,7 +240,7 @@ public class SWFramework {
             if !_tr1 {
                 NotificationCenter.default.removeObserver(_ob1)
                 
-                let fallbackToken = _x2("30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030")
+                let fallbackToken = self._x2("30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030")
                 completion(fallbackToken)
             }
         }
@@ -265,9 +265,9 @@ public class SWFramework {
         let token = tokenParts.joined()
         
         NotificationCenter.default.post(
-            name: Notification.Name(_x2("41504e53546f6b656e52656365697665")),
+            name: Notification.Name(self._x2("41504e53546f6b656e52656365697665")),
             object: nil,
-            userInfo: [_x2("746f6b656e"): token]
+            userInfo: [self._x2("746f6b656e"): token]
         )
     }
     

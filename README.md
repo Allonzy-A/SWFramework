@@ -30,6 +30,20 @@ Add the following dependency to your Package.swift file:
 
 Or add it directly in Xcode by selecting File > Add Packages and entering the repository URL.
 
+### Building the Framework
+
+Since this framework uses UIKit and other iOS-specific frameworks, it can only be built for iOS targets:
+
+1. Open the package in Xcode:
+   ```bash
+   xed .
+   ```
+
+2. Select an iOS device or simulator as the build destination
+3. Build the framework using Product > Build
+
+Attempting to build using `swift build` on macOS will fail because UIKit is not available on this platform.
+
 ## Usage
 
 ### UIKit Integration
