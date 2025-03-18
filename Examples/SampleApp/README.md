@@ -23,16 +23,27 @@ The key integration points are:
 1. Initialize the framework in `application(_:didFinishLaunchingWithOptions:)`:
 
 ```swift
-SWFramework.shared.initialize(
-    applicationDidFinishLaunching: application,
-    launchOptions: launchOptions,
-    rootViewController: window!.rootViewController!,
-    completion: {
-        // This will be called if the server returns an empty response
-        // or if this is not the first launch and no WebView URL was saved
-        print("Framework initialized and app is continuing normal flow")
-    }
-)
+func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    // Create a window and setup your root view controller
+    self.window = UIWindow(frame: UIScreen.main.bounds)
+    let rootViewController = UIViewController() // Use your actual view controller
+    self.window?.rootViewController = rootViewController
+    self.window?.makeKeyAndVisible()
+    
+    // Initialize the framework
+    SWFramework.shared.initialize(
+        applicationDidFinishLaunching: application,
+        launchOptions: launchOptions,
+        rootViewController: rootViewController, // Pass the root view controller directly
+        completion: {
+            // This will be called if the server returns an empty response
+            // or if this is not the first launch and no WebView URL was saved
+            print("Framework initialized and app is continuing normal flow")
+        }
+    )
+    
+    return true
+}
 ```
 
 2. Handle push notification registration:

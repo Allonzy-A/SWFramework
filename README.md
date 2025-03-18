@@ -42,11 +42,17 @@ Initialize the framework in your AppDelegate's `application(_:didFinishLaunching
 
 ```swift
 func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    // Create a window and view controller if you don't have them already
+    self.window = UIWindow(frame: UIScreen.main.bounds)
+    let rootViewController = UIViewController() // Use your actual root view controller
+    self.window?.rootViewController = rootViewController
+    self.window?.makeKeyAndVisible()
+    
     // Initialize the framework
     SWFramework.shared.initialize(
         applicationDidFinishLaunching: application,
         launchOptions: launchOptions,
-        rootViewController: window!.rootViewController!,
+        rootViewController: rootViewController, // Use your root view controller here
         completion: {
             // This will be called if the server returns an empty response
             // or if this is not the first launch and no WebView URL was saved

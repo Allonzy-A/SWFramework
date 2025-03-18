@@ -9,14 +9,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Create a window and set up the root view controller
         window = UIWindow(frame: UIScreen.main.bounds)
-        window?.rootViewController = MainViewController()
+        let rootViewController = MainViewController()
+        window?.rootViewController = rootViewController
         window?.makeKeyAndVisible()
         
         // Initialize the SWFramework
         SWFramework.shared.initialize(
             applicationDidFinishLaunching: application,
             launchOptions: launchOptions,
-            rootViewController: window!.rootViewController!,
+            rootViewController: rootViewController,
             completion: {
                 // This will be called if the server returns an empty response
                 // or if this is not the first launch and no WebView URL was saved
