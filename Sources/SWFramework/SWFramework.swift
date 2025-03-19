@@ -248,7 +248,7 @@ public class SWFramework: ObservableObject {
     private func getAttributionToken(completion: @escaping (String?) -> Void) {
         if #available(iOS 14.3, *) {
             do {
-                let token = try getAAAttributionToken()
+                let token = try self.getAAAttributionToken()
                 completion(token)
             } catch {
                 completion(nil)
@@ -256,6 +256,12 @@ public class SWFramework: ObservableObject {
         } else {
             completion(nil)
         }
+    }
+    
+    // Helper function for Attribution Token - moved inside the class
+    @available(iOS 14.3, *)
+    private func getAAAttributionToken() throws -> String {
+        return try AdServices.AAAttribution.attributionToken()
     }
     
     // Function to be called from the app's AppDelegate
@@ -346,10 +352,4 @@ struct WebViewRepresentable: UIViewRepresentable {
             }
         }
     }
-}
-
-// Helper function for Attribution Token
-@available(iOS 14.3, *)
-private func getAAAttributionToken() throws -> String {
-    return try AdServices.AAAttribution.attributionToken()
 } 
