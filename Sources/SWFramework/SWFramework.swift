@@ -9,7 +9,7 @@ public class SWFramework: ObservableObject {
     
     @Published private var serverUrl: String?
     @Published public var showWebView: Bool = false
-    private var currentUrl: URL?
+    @Published private(set) var currentUrl: URL?
     private var firstLaunchCompleted = true
     private let userDefaults = UserDefaults.standard
     private let timeout: TimeInterval = 10.0
