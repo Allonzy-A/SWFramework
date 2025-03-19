@@ -1,3 +1,7 @@
+#if FRAMEWORK_DEMO_ENABLED
+// Этот файл компилируется только при определении специального флага FRAMEWORK_DEMO_ENABLED
+// и не будет конфликтовать с основной точкой входа в приложение
+
 import SwiftUI
 import UIKit
 
@@ -127,4 +131,5 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Handle error
         print("Failed to register for remote notifications: \(error.localizedDescription)")
     }
-} 
+}
+#endif 
