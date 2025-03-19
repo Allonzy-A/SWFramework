@@ -15,7 +15,10 @@ let package = Package(
     targets: [
         .target(
             name: "SWFramework",
-            dependencies: []),
+            dependencies: [],
+            resources: [
+                .process("Resources")
+            ]),
         .testTarget(
             name: "SWFrameworkTests",
             dependencies: ["SWFramework"]),

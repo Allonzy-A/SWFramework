@@ -1,170 +1,106 @@
 # SWFramework
 
-A Swift framework for iOS applications that collects device data, communicates with a server, and displays web content based on the server response.
+Легковесный SwiftUI фреймворк для управления веб-контентом и уведомлениями в iOS приложениях.
 
-## Features
+## Особенности
 
-- Pauses app processes on launch to collect device data
-- Collects APNS token, ATT token, and bundle ID
-- Communicates with a server to determine next actions
-- Displays web content in a full-screen WebView if required
-- Caches server response for future app launches
-- Supports iOS 15.0+
-- Automatically generates domain from bundle ID
+- Полная интеграция с SwiftUI и современной архитектурой iOS приложений
+- Обработка APNS токенов для push-уведомлений
+- Получение и обработка Attribution токенов (iOS 14.3+)
+- Отображение полноэкранного WebView с поддержкой запросов медиа-доступа
+- Автоматическая генерация доменов на основе идентификатора приложения
 
-## Requirements
+## Требования
 
 - iOS 15.0+
 - Swift 5.5+
 - Xcode 13.0+
 
-## Installation
+## Установка
 
 ### Swift Package Manager
 
-Add the following dependency to your Package.swift file:
+Добавьте SWFramework в качестве зависимости в ваш Package.swift файл:
 
 ```swift
-.package(url: "https://github.com/yourusername/SWFramework.git", from: "1.0.0")
+dependencies: [
+    .package(url: "https://github.com/your-username/SWFramework.git", from: "1.0.0")
+]
 ```
 
-Or add it directly in Xcode by selecting File > Add Packages and entering the repository URL.
+Или добавьте его через Xcode:
+1. File > Add Packages
+2. Введите URL репозитория
+3. Выберите версию и целевой проект
 
-### Building the Framework
+## Использование
 
-Since this framework uses UIKit and other iOS-specific frameworks, it can only be built for iOS targets:
+### Интеграция с SwiftUI
 
-1. Open the package in Xcode:
-   ```bash
-   xed .
-   ```
-
-2. Select an iOS device or simulator as the build destination
-3. Build the framework using Product > Build
-
-Attempting to build using `swift build` on macOS will fail because UIKit is not available on this platform.
-
-## Usage
-
-### UIKit Integration
-
-Import SWFramework in your AppDelegate:
+1. Создайте AppDelegate и используйте @UIApplicationDelegateAdaptor в вашем App:
 
 ```swift
-import SWFramework
-```
-
-Initialize the framework in your AppDelegate's `application(_:didFinishLaunchingWithOptions:)` method:
-
-```swift
-func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    // Create a window and view controller if you don't have them already
-    self.window = UIWindow(frame: UIScreen.main.bounds)
-    let rootViewController = UIViewController() // Use your actual root view controller
-    self.window?.rootViewController = rootViewController
-    self.window?.makeKeyAndVisible()
-    
-    // Initialize the framework
-    SWFramework.shared.initialize(
-        applicationDidFinishLaunching: application,
-        launchOptions: launchOptions,
-        rootViewController: rootViewController, // Use your root view controller here
-        completion: {
-            // This will be called if the server returns an empty response
-            // or if this is not the first launch and no WebView URL was saved
-            // Continue with your normal app initialization here
-        }
-    )
-    
-    return true
-}
-```
-
-### SwiftUI Integration
-
-For SwiftUI apps, you need to set up a UIApplicationDelegate and use the `.onAppear` modifier:
-
-```swift
-import SwiftUI
-import UIKit
-import SWFramework
-
-// Define a class that conforms to UIApplicationDelegate
-class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        return true
-    }
-    
-    // Handle push notification registration
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        SWFramework.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
-    }
-}
-
 @main
-struct MyApp: App {
-    // Register app delegate for the application lifecycle
+struct YourApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .onAppear {
-                    // Get UIApplication instance
-                    let application = UIApplication.shared
-                    
-                    // We need to get the root view controller
-                    if let rootViewController = UIApplication.shared.windows.first?.rootViewController {
-                        // Initialize the SWFramework
-                        SWFramework.shared.initialize(
-                            applicationDidFinishLaunching: application,
-                            launchOptions: nil,
-                            rootViewController: rootViewController,
-                            completion: {
-                                print("Framework initialized and app is continuing normal flow")
-                            }
-                        )
-                    }
-                }
+            SWWebView(contentView: AnyView(YourContentView()))
         }
     }
 }
 ```
 
-### Push Notification Handling
-
-Add the following method to your AppDelegate to handle APNS token registration:
+2. Настройте AppDelegate:
 
 ```swift
-func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-    SWFramework.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        SWFramework.shared.initialize(application: application, launchOptions: launchOptions) {
+            // Код, выполняемый после инициализации
+        }
+        return true
+    }
+    
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        SWFramework.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    }
 }
 ```
 
-## Domain Generation
+3. Создайте основной контент приложения, который будет отображаться, если WebView не активирован:
 
-The framework automatically generates a domain based on your app's bundle ID. For example:
-
-- If your bundle ID is "svs.tartnap", the generated domain will be "svstartnap.top"
-- All dots are removed from the bundle ID, and the top-level domain ".top" is added
-
-## Permissions
-
-The framework will request the following permissions:
-
-- Push notifications (for APNS token)
-- Camera (if required by WebView content)
-
-Make sure to add the following keys to your Info.plist:
-
-```xml
-<key>NSCameraUsageDescription</key>
-<string>This app needs access to the camera to provide full functionality in web content.</string>
-
-<key>NSMicrophoneUsageDescription</key>
-<string>This app needs access to the microphone to provide full functionality in web content.</string>
+```swift
+struct YourContentView: View {
+    var body: some View {
+        VStack {
+            Text("Основной контент приложения")
+        }
+    }
+}
 ```
 
-## License
+## Демонстрация
 
-This framework is licensed under the MIT License. 
+В проекте включен демонстрационный файл `SWFrameworkDemo.swift`, показывающий полную интеграцию фреймворка в SwiftUI приложение.
+
+## Работа фреймворка
+
+1. При инициализации фреймворк проверяет, запускается ли приложение в первый раз
+2. Если это первый запуск, фреймворк получает APNS и Attribution токены
+3. Данные отправляются на сервер, и в зависимости от ответа:
+   - Отображается WebView с URL из ответа, или
+   - Продолжается нормальный поток приложения
+
+## Сборка
+
+Для сборки проекта используйте Xcode или Swift Package Manager с настройками для iOS:
+
+```bash
+xcodebuild -scheme SWFramework -sdk iphoneos -configuration Release
+```
+
+## Лицензия
+
+MIT 
