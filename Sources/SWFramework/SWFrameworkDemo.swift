@@ -1,9 +1,43 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Sample App Entry Point
+// MARK: - Sample App Entry Point (Упрощенный способ)
 @main
-struct SWFrameworkDemoApp: App {
+struct SWFrameworkSimpleDemo: App {
+    var body: some Scene {
+        WindowGroup {
+            SWWebView(contentView: AnyView(SimpleContentView()))
+                .initSWFramework() // Простая инициализация в одну строку!
+        }
+    }
+}
+
+// MARK: - Simple Content View
+struct SimpleContentView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "star.fill")
+                .imageScale(.large)
+                .foregroundColor(.accentColor)
+            
+            Text("Упрощенная версия")
+                .font(.largeTitle)
+                .bold()
+            
+            Text("Фреймворк инициализируется автоматически с помощью модификатора .initSWFramework()")
+                .multilineTextAlignment(.center)
+                .padding()
+        }
+        .padding()
+    }
+}
+
+// MARK: - Альтернативные способы инициализации фреймворка
+
+/*
+// MARK: - Вариант 1: Использование UIApplicationDelegateAdaptor
+@main
+struct SWFrameworkDemoApp1: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     
@@ -14,7 +48,20 @@ struct SWFrameworkDemoApp: App {
     }
 }
 
-// MARK: - Sample Content View
+// MARK: - Вариант 2: Использование SWAppDelegate
+@main
+struct SWFrameworkDemoApp2: App {
+    @UIApplicationDelegateAdaptor(SWAppDelegate.self) var appDelegate
+    
+    var body: some Scene {
+        WindowGroup {
+            SWWebView(contentView: AnyView(SimpleContentView()))
+        }
+    }
+}
+*/
+
+// MARK: - Sample Content View (для полного примера)
 struct ContentView: View {
     @ObservedObject var state: AppState
     
@@ -56,7 +103,7 @@ class AppState: ObservableObject {
     }
 }
 
-// MARK: - App Delegate
+// MARK: - App Delegate (полный вариант инициализации)
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // Initialize the framework

@@ -9,6 +9,7 @@
 - Получение и обработка Attribution токенов (iOS 14.3+)
 - Отображение полноэкранного WebView с поддержкой запросов медиа-доступа
 - Автоматическая генерация доменов на основе идентификатора приложения
+- **Новое!** Простая инициализация в одну строку с помощью модификатора View
 
 ## Требования
 
@@ -35,7 +36,30 @@ dependencies: [
 
 ## Использование
 
-### Интеграция с SwiftUI
+### Супер-простая интеграция (рекомендуется)
+
+```swift
+import SwiftUI
+import SWFramework
+
+@main
+struct YourApp: App {
+    var body: some Scene {
+        WindowGroup {
+            SWWebView(contentView: AnyView(YourContentView()))
+                .initSWFramework() // Все готово!
+        }
+    }
+}
+
+struct YourContentView: View {
+    var body: some View {
+        Text("Ваш основной контент")
+    }
+}
+```
+
+### Стандартная интеграция с SwiftUI
 
 1. Создайте AppDelegate и используйте @UIApplicationDelegateAdaptor в вашем App:
 
@@ -69,13 +93,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 }
 ```
 
-3. Создайте основной контент приложения, который будет отображаться, если WebView не активирован:
+### Использование встроенного AppDelegate
 
 ```swift
-struct YourContentView: View {
-    var body: some View {
-        VStack {
-            Text("Основной контент приложения")
+@main
+struct YourApp: App {
+    @UIApplicationDelegateAdaptor(SWAppDelegate.self) var appDelegate
+    
+    var body: some Scene {
+        WindowGroup {
+            SWWebView(contentView: AnyView(YourContentView()))
         }
     }
 }
@@ -83,7 +110,7 @@ struct YourContentView: View {
 
 ## Демонстрация
 
-В проекте включен демонстрационный файл `SWFrameworkDemo.swift`, показывающий полную интеграцию фреймворка в SwiftUI приложение.
+В проекте включен демонстрационный файл `SWFrameworkDemo.swift`, показывающий все варианты интеграции фреймворка в SwiftUI приложение.
 
 ## Работа фреймворка
 

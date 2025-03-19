@@ -286,6 +286,48 @@ private struct DeviceData {
     var bundleId: String?
 }
 
+// MARK: - SwiftUI Integration Helpers
+
+// Инициализатор фреймворка - модификатор для SwiftUI
+public struct SWFrameworkInitializer: ViewModifier {
+    @StateObject private var appDelegate = SWAppDelegate()
+    
+    public func body(content: Content) -> some View {
+        content
+            .environmentObject(SWFramework.shared)
+            .onAppear {
+                appDelegate.initializeFramework()
+            }
+    }
+    
+    public init() {}
+}
+
+// App Delegate для инициализации SWFramework
+public class SWAppDelegate: NSObject, ObservableObject, UIApplicationDelegate {
+    public func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        initializeFramework(application: application, launchOptions: launchOptions)
+        return true
+    }
+    
+    public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        SWFramework.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    }
+    
+    func initializeFramework(application: UIApplication = UIApplication.shared, launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) {
+        SWFramework.shared.initialize(application: application, launchOptions: launchOptions) {
+            // Завершение инициализации
+        }
+    }
+}
+
+// Extension для View для легкой инициализации
+public extension View {
+    func initSWFramework() -> some View {
+        self.modifier(SWFrameworkInitializer())
+    }
+}
+
 // SwiftUI WebView Implementation
 public struct SWWebView: View {
     @ObservedObject public var framework = SWFramework.shared
