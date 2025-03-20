@@ -553,7 +553,6 @@ struct WebViewRepresentable: UIViewRepresentable {
                         windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
                     } else {
                         // На более старых версиях iOS используем более безопасный подход
-                        let orientation = UIInterfaceOrientation.portrait
                         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
                         
                         // Этот подход предпочтительнее setValue:forKey:
@@ -561,11 +560,9 @@ struct WebViewRepresentable: UIViewRepresentable {
                            let window = appDelegate.window as? UIWindow {
                             
                             if let viewController = window.rootViewController {
-                                // Устанавливаем ориентацию контроллера
-                                let orientationValue = orientation.rawValue
-                                if let orientationOptions = UIInterfaceOrientationMask(rawValue: UInt(1 << orientationValue)) {
-                                    self.setOrientationMask(orientationOptions, for: viewController)
-                                }
+                                // Создаем маску ориентации напрямую, без преобразования через UInt
+                                let orientationMask: UIInterfaceOrientationMask = .portrait
+                                self.setOrientationMask(orientationMask, for: viewController)
                             }
                         }
                     }
