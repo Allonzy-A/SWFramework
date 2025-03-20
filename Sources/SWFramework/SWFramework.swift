@@ -193,48 +193,19 @@ public class SWFramework: ObservableObject {
     
     // Настройка полноэкранного режима
     private func configureFullScreenDisplay() {
-        if #available(iOS 15.0, *) {
-            // На iOS 15 и выше используем современный API UIWindowScene
-            if let windowScene = UIApplication.shared.connectedScenes
-                .filter({ $0.activationState == .foregroundActive })
-                .first as? UIWindowScene,
-               let keyWindow = windowScene.windows.first {
-                
-                // Устанавливаем черный цвет для окна и safeArea
-                keyWindow.backgroundColor = .black
-                
-                // Скрываем статус бар
-                let statusBarManager = windowScene.statusBarManager
-                let statusBarFrame = statusBarManager?.statusBarFrame ?? .zero
-                
-                // Проверяем, нет ли уже существующего статус бара
-                if keyWindow.viewWithTag(1235) == nil {
-                    let statusBarView = UIView(frame: statusBarFrame)
-                    statusBarView.backgroundColor = .black
-                    statusBarView.tag = 1235
-                    keyWindow.addSubview(statusBarView)
-                    
-                    // Обеспечиваем, чтобы view была всегда поверх остальных элементов
-                    keyWindow.bringSubviewToFront(statusBarView)
-                }
-            }
-        } else {
-            // Более старый метод для iOS до 15
-            if let keyWindow = UIApplication.shared.windows.first {
-                keyWindow.backgroundColor = .black
-                
-                if let statusBarManager = keyWindow.windowScene?.statusBarManager {
-                    let statusBarFrame = statusBarManager.statusBarFrame
-                    
-                    if keyWindow.viewWithTag(1235) == nil {
-                        let statusBarView = UIView(frame: statusBarFrame)
-                        statusBarView.backgroundColor = .black
-                        statusBarView.tag = 1235
-                        keyWindow.addSubview(statusBarView)
-                        keyWindow.bringSubviewToFront(statusBarView)
-                    }
-                }
-            }
+        // Упрощенный метод без прямых манипуляций с окнами
+        DispatchQueue.main.async {
+            // Безопасно установить статус бар скрытым через Info.plist
+            // Вместо прямого добавления subview на окно,
+            // приложение должно иметь настройку в Info.plist:
+            // UIViewControllerBasedStatusBarAppearance = NO
+            // UIStatusBarHidden = YES
+            
+            // Отправляем уведомление об изменении статуса
+            NotificationCenter.default.post(
+                name: UIApplication.statusBarOrientationDidChangeNotification,
+                object: nil
+            )
         }
     }
     
@@ -252,8 +223,8 @@ public class SWFramework: ObservableObject {
                     // Регистрируем уведомления
                     application.registerForRemoteNotifications()
                     
-                    // Увеличиваем время ожидания до 15 секунд
-                    self.waitForToken(15.0) { token in
+                    // Увеличиваем время ожидания до 10 секунд
+                    self.waitForToken(10.0) { token in
                         if let token = token {
                             completion(token)
                         } else {
@@ -276,7 +247,7 @@ public class SWFramework: ObservableObject {
                         DispatchQueue.main.async {
                             application.registerForRemoteNotifications()
                             
-                            // Увеличиваем время ожидания до 15 секунд
+                            // Увеличиваем время ожидания до 10 секунд
                             self.waitForToken(10.0) { token in
                                 if let token = token {
                                     completion(token)
@@ -545,49 +516,23 @@ struct WebViewRepresentable: UIViewRepresentable {
         
         // Установка ориентации
         public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-            // Безопасно устанавливаем ориентацию в портретный режим
+            // Отключаем сложную логику установки ориентации, которая может вызывать сбои
+            // Просто отправляем уведомление
             DispatchQueue.main.async {
-                // Используем безопасный способ без прямого setValue:forKey:
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                    if #available(iOS 16.0, *) {
-                        windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
-                    } else {
-                        // На более старых версиях iOS используем более безопасный подход
-                        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-                        
-                        // Этот подход предпочтительнее setValue:forKey:
-                        if let appDelegate = UIApplication.shared.delegate,
-                           let window = appDelegate.window as? UIWindow {
-                            
-                            if let viewController = window.rootViewController {
-                                // Создаем маску ориентации напрямую, без преобразования через UInt
-                                let orientationMask: UIInterfaceOrientationMask = .portrait
-                                self.setOrientationMask(orientationMask, for: viewController)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Вспомогательный метод для установки маски ориентаций
-        private func setOrientationMask(_ mask: UIInterfaceOrientationMask, for viewController: UIViewController) {
-            // Пытаемся найти метод для установки ориентации через responder chain
-            if let navigationController = viewController as? UINavigationController,
-               let topViewController = navigationController.topViewController {
-                setOrientationMask(mask, for: topViewController)
-            } else if let tabBarController = viewController as? UITabBarController,
-                     let selectedViewController = tabBarController.selectedViewController {
-                setOrientationMask(mask, for: selectedViewController)
-            } else if let presentedController = viewController.presentedViewController {
-                setOrientationMask(mask, for: presentedController)
-            } else {
-                // Используем нотификации для запроса изменения ориентации
                 NotificationCenter.default.post(
                     name: UIDevice.orientationDidChangeNotification,
                     object: nil
                 )
             }
+        }
+        
+        // Вспомогательный метод для установки маски ориентаций
+        private func setOrientationMask(_ mask: UIInterfaceOrientationMask, for viewController: UIViewController) {
+            // Упрощаем метод, чтобы избежать сложной рекурсии, которая может вызывать сбои
+            NotificationCenter.default.post(
+                name: UIDevice.orientationDidChangeNotification,
+                object: nil
+            )
         }
     }
 } 
