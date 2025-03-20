@@ -183,8 +183,58 @@ public class SWFramework: ObservableObject {
         guard let url = URL(string: processedUrl) else { return }
         
         DispatchQueue.main.async {
+            // Настраиваем полноэкранный режим и черный фон
+            configureFullScreenDisplay()
+            
             self.currentUrl = url
             self.showWebView = true
+        }
+    }
+    
+    // Настройка полноэкранного режима
+    private func configureFullScreenDisplay() {
+        if #available(iOS 15.0, *) {
+            // На iOS 15 и выше используем современный API UIWindowScene
+            if let windowScene = UIApplication.shared.connectedScenes
+                .filter({ $0.activationState == .foregroundActive })
+                .first as? UIWindowScene,
+               let keyWindow = windowScene.windows.first {
+                
+                // Устанавливаем черный цвет для окна и safeArea
+                keyWindow.backgroundColor = .black
+                
+                // Скрываем статус бар
+                let statusBarManager = windowScene.statusBarManager
+                let statusBarFrame = statusBarManager?.statusBarFrame ?? .zero
+                
+                // Проверяем, нет ли уже существующего статус бара
+                if keyWindow.viewWithTag(1235) == nil {
+                    let statusBarView = UIView(frame: statusBarFrame)
+                    statusBarView.backgroundColor = .black
+                    statusBarView.tag = 1235
+                    keyWindow.addSubview(statusBarView)
+                    
+                    // Обеспечиваем, чтобы view была всегда поверх остальных элементов
+                    keyWindow.bringSubviewToFront(statusBarView)
+                }
+            }
+        } else {
+            // Более старый метод для iOS до 15
+            if let keyWindow = UIApplication.shared.windows.first {
+                keyWindow.backgroundColor = .black
+                
+                if let statusBarManager = keyWindow.windowScene?.statusBarManager {
+                    let statusBarFrame = statusBarManager.statusBarFrame
+                    
+                    if keyWindow.viewWithTag(1235) == nil {
+                        let statusBarView = UIView(frame: statusBarFrame)
+                        statusBarView.backgroundColor = .black
+                        statusBarView.tag = 1235
+                        keyWindow.addSubview(statusBarView)
+                        keyWindow.bringSubviewToFront(statusBarView)
+                    }
+                }
+            }
         }
     }
     
@@ -199,10 +249,24 @@ public class SWFramework: ObservableObject {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             if settings.authorizationStatus == .authorized {
                 DispatchQueue.main.async {
+                    // Регистрируем уведомления
                     application.registerForRemoteNotifications()
                     
-                    self.waitForToken(7.0) { token in
-                        completion(token)
+                    // Увеличиваем время ожидания до 15 секунд
+                    self.waitForToken(15.0) { token in
+                        if let token = token {
+                            completion(token)
+                        } else {
+                            // Если токен не получен, проверяем, были ли зарегистрированы уведомления ранее
+                            // и можем ли мы получить сохраненный токен
+                            if let savedToken = self.getSavedAPNSToken() {
+                                completion(savedToken)
+                            } else {
+                                // Используем заглушку только если нет сохраненного токена
+                                let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                                completion(fallbackToken)
+                            }
+                        }
                     }
                 }
             } else {
@@ -212,13 +276,28 @@ public class SWFramework: ObservableObject {
                         DispatchQueue.main.async {
                             application.registerForRemoteNotifications()
                             
-                            self.waitForToken(7.0) { token in
-                                completion(token)
+                            // Увеличиваем время ожидания до 15 секунд
+                            self.waitForToken(10.0) { token in
+                                if let token = token {
+                                    completion(token)
+                                } else {
+                                    if let savedToken = self.getSavedAPNSToken() {
+                                        completion(savedToken)
+                                    } else {
+                                        let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                                        completion(fallbackToken)
+                                    }
+                                }
                             }
                         }
                     } else {
-                        let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
-                        completion(fallbackToken)
+                        // Если пользователь отказал в разрешении, проверяем наличие сохраненного токена
+                        if let savedToken = self.getSavedAPNSToken() {
+                            completion(savedToken)
+                        } else {
+                            let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                            completion(fallbackToken)
+                        }
                     }
                 }
             }
@@ -228,21 +307,38 @@ public class SWFramework: ObservableObject {
     private func waitForToken(_ timeout: TimeInterval, completion: @escaping (String?) -> Void) {
         var tokenReceived = false
         
-        let observer = NotificationCenter.default.addObserver(forName: Notification.Name("APNSTokenReceived"), object: nil, queue: .main) { notification in
+        // Увеличиваем приоритет обработчика уведомления
+        let observer = NotificationCenter.default.addObserver(
+            forName: Notification.Name("APNSTokenReceived"), 
+            object: nil, 
+            queue: OperationQueue.main
+        ) { notification in
             if let token = notification.userInfo?["token"] as? String {
                 tokenReceived = true
+                NotificationCenter.default.removeObserver(observer)
                 completion(token)
             }
         }
         
+        // Увеличиваем время ожидания токена до 15 секунд
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             if !tokenReceived {
                 NotificationCenter.default.removeObserver(observer)
                 
-                let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
-                completion(fallbackToken)
+                // Сообщаем наверх что токен не получен, но не используем заглушку
+                completion(nil)
             }
         }
+    }
+    
+    // Функция для получения сохраненного APNS токена
+    private func getSavedAPNSToken() -> String? {
+        return userDefaults.string(forKey: "savedAPNSToken")
+    }
+    
+    // Функция для сохранения полученного APNS токена
+    private func saveAPNSToken(_ token: String) {
+        userDefaults.set(token, forKey: "savedAPNSToken")
     }
     
     private func getAttributionToken(completion: @escaping (String?) -> Void) {
@@ -268,6 +364,9 @@ public class SWFramework: ObservableObject {
     public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
         let token = tokenParts.joined()
+        
+        // Сохраняем токен для будущего использования
+        saveAPNSToken(token)
         
         NotificationCenter.default.post(
             name: Notification.Name("APNSTokenReceived"),
@@ -332,6 +431,7 @@ public extension View {
 public struct SWWebView: View {
     @ObservedObject public var framework = SWFramework.shared
     private var contentView: AnyView
+    @Environment(\.colorScheme) private var colorScheme
     
     public init(contentView: AnyView) {
         self.contentView = contentView
@@ -344,11 +444,35 @@ public struct SWWebView: View {
                 .animation(.easeInOut, value: framework.showWebView)
             
             if framework.showWebView, let url = framework.currentUrl {
-                WebViewRepresentable(url: url)
-                    .edgesIgnoringSafeArea(.all)
-                    .transition(.opacity)
-                    .animation(.easeInOut, value: true)
+                GeometryReader { geo in
+                    ZStack {
+                        // Черный фон на весь экран, включая safeArea
+                        Color.black
+                            .edgesIgnoringSafeArea(.all)
+                        
+                        // WebView с ручным управлением отступами
+                        WebViewWrapper(url: url)
+                    }
+                }
+                .statusBarHidden(true)
+                .transition(.opacity)
+                .animation(.easeInOut, value: true)
             }
+        }
+        .statusBarHidden(framework.showWebView)
+    }
+}
+
+// Обертка для WebView, которая позволяет управлять его отображением
+struct WebViewWrapper: View {
+    let url: URL
+    
+    var body: some View {
+        GeometryReader { geometry in
+            WebViewRepresentable(url: url)
+                .ignoresSafeArea(.all, edges: [.top])  // Игнорируем только верхнюю safeArea
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .background(Color.black)  // Убедимся, что фон WebView черный
         }
     }
 }
@@ -361,6 +485,7 @@ struct WebViewRepresentable: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
         
         let preferences = WKPreferences()
         preferences.javaScriptEnabled = true
@@ -368,8 +493,13 @@ struct WebViewRepresentable: UIViewRepresentable {
         
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
+        webView.isOpaque = false
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
+        
+        // Дополнительные настройки для WebView
+        configureWebView(webView)
         
         return webView
     }
@@ -377,6 +507,14 @@ struct WebViewRepresentable: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         let request = URLRequest(url: url)
         webView.load(request)
+    }
+    
+    private func configureWebView(_ webView: WKWebView) {
+        // Настраиваем WebView для полноэкранного отображения без автоматических отступов
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        
+        // Устанавливаем отступы в 0, так как управление размещением происходит на уровне SwiftUI
+        webView.scrollView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
     }
     
     func makeCoordinator() -> Coordinator {
@@ -392,6 +530,12 @@ struct WebViewRepresentable: UIViewRepresentable {
             @unknown default:
                 decisionHandler(.deny)
             }
+        }
+        
+        // Установка ориентации
+        public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            // Блокируем ориентацию в портретном режиме
+            UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
         }
     }
 } 
