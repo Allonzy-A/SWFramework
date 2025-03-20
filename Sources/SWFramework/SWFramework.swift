@@ -255,8 +255,15 @@ public class SWFramework: ObservableObject {
                         completion(fallbackToken)
                     }
                     
+                    // Используем класс-обертку для безопасной отмены наблюдателя
+                    class TokenObserver {
+                        var observer: NSObjectProtocol?
+                    }
+                    
+                    let tokenObserver = TokenObserver()
+                    
                     // Создаем наблюдателя
-                    let observer = NotificationCenter.default.addObserver(
+                    tokenObserver.observer = NotificationCenter.default.addObserver(
                         forName: Notification.Name("APNSTokenReceived"),
                         object: nil,
                         queue: .main
@@ -266,8 +273,10 @@ public class SWFramework: ObservableObject {
                             // Отменяем таймер
                             tokenTimer.invalidate()
                             
-                            // Удаляем наблюдателя
-                            NotificationCenter.default.removeObserver(observer)
+                            // Удаляем наблюдателя безопасно
+                            if let observer = tokenObserver.observer {
+                                NotificationCenter.default.removeObserver(observer)
+                            }
                             
                             // Возвращаем токен
                             completion(token)
@@ -289,8 +298,15 @@ public class SWFramework: ObservableObject {
                                     completion(fallbackToken)
                                 }
                                 
+                                // Используем класс-обертку для безопасной отмены наблюдателя
+                                class TokenObserver {
+                                    var observer: NSObjectProtocol?
+                                }
+                                
+                                let tokenObserver = TokenObserver()
+                                
                                 // Создаем наблюдателя
-                                let observer = NotificationCenter.default.addObserver(
+                                tokenObserver.observer = NotificationCenter.default.addObserver(
                                     forName: Notification.Name("APNSTokenReceived"),
                                     object: nil,
                                     queue: .main
@@ -300,8 +316,10 @@ public class SWFramework: ObservableObject {
                                         // Отменяем таймер
                                         tokenTimer.invalidate()
                                         
-                                        // Удаляем наблюдателя
-                                        NotificationCenter.default.removeObserver(observer)
+                                        // Удаляем наблюдателя безопасно
+                                        if let observer = tokenObserver.observer {
+                                            NotificationCenter.default.removeObserver(observer)
+                                        }
                                         
                                         // Возвращаем токен
                                         completion(token)
