@@ -86,7 +86,6 @@ public class SWFramework: ObservableObject {
         timer.setEventHandler {
             // Если таймер сработал, освобождаем группу
             group.leave()
-            group.leave()
         }
         
         // Получаем APNS токен
