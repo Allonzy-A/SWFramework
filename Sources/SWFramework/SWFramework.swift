@@ -203,7 +203,7 @@ public class SWFramework: ObservableObject {
             
             // Отправляем уведомление об изменении статуса
             NotificationCenter.default.post(
-                name: UIApplication.statusBarOrientationDidChangeNotification,
+                name: UIDevice.orientationDidChangeNotification,
                 object: nil
             )
         }

@@ -23,9 +23,10 @@ public struct StatusBarModifiers {
         private func setStatusBarVisibility(_ hidden: Bool) {
             // Используем более безопасный метод без прямых манипуляций с окнами
             DispatchQueue.main.async {
-                // Отправляем уведомление об изменении видимости статус бара
+                // Отправляем уведомление об изменении видимости статус бара 
+                // Используем уведомление об изменении ориентации устройства
                 NotificationCenter.default.post(
-                    name: UIApplication.statusBarOrientationDidChangeNotification,
+                    name: UIDevice.orientationDidChangeNotification,
                     object: nil
                 )
                 
