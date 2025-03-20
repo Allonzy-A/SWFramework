@@ -307,15 +307,23 @@ public class SWFramework: ObservableObject {
     private func waitForToken(_ timeout: TimeInterval, completion: @escaping (String?) -> Void) {
         var tokenReceived = false
         
+        // Создаем переменную для хранения наблюдателя
+        var notificationObserver: NSObjectProtocol? = nil
+        
         // Увеличиваем приоритет обработчика уведомления
-        let observer = NotificationCenter.default.addObserver(
+        notificationObserver = NotificationCenter.default.addObserver(
             forName: Notification.Name("APNSTokenReceived"), 
             object: nil, 
             queue: OperationQueue.main
         ) { notification in
             if let token = notification.userInfo?["token"] as? String {
                 tokenReceived = true
-                NotificationCenter.default.removeObserver(observer)
+                
+                // Теперь observer определен до его использования
+                if let observer = notificationObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                }
+                
                 completion(token)
             }
         }
@@ -323,7 +331,10 @@ public class SWFramework: ObservableObject {
         // Увеличиваем время ожидания токена до 15 секунд
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             if !tokenReceived {
-                NotificationCenter.default.removeObserver(observer)
+                // Теперь observer определен до его использования
+                if let observer = notificationObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                }
                 
                 // Сообщаем наверх что токен не получен, но не используем заглушку
                 completion(nil)
