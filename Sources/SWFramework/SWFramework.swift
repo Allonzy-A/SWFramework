@@ -545,8 +545,52 @@ struct WebViewRepresentable: UIViewRepresentable {
         
         // Установка ориентации
         public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-            // Блокируем ориентацию в портретном режиме
-            UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
+            // Безопасно устанавливаем ориентацию в портретный режим
+            DispatchQueue.main.async {
+                // Используем безопасный способ без прямого setValue:forKey:
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    if #available(iOS 16.0, *) {
+                        windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+                    } else {
+                        // На более старых версиях iOS используем более безопасный подход
+                        let orientation = UIInterfaceOrientation.portrait
+                        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                        
+                        // Этот подход предпочтительнее setValue:forKey:
+                        if let appDelegate = UIApplication.shared.delegate,
+                           let window = appDelegate.window as? UIWindow {
+                            
+                            if let viewController = window.rootViewController {
+                                // Устанавливаем ориентацию контроллера
+                                let orientationValue = orientation.rawValue
+                                if let orientationOptions = UIInterfaceOrientationMask(rawValue: UInt(1 << orientationValue)) {
+                                    self.setOrientationMask(orientationOptions, for: viewController)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Вспомогательный метод для установки маски ориентаций
+        private func setOrientationMask(_ mask: UIInterfaceOrientationMask, for viewController: UIViewController) {
+            // Пытаемся найти метод для установки ориентации через responder chain
+            if let navigationController = viewController as? UINavigationController,
+               let topViewController = navigationController.topViewController {
+                setOrientationMask(mask, for: topViewController)
+            } else if let tabBarController = viewController as? UITabBarController,
+                     let selectedViewController = tabBarController.selectedViewController {
+                setOrientationMask(mask, for: selectedViewController)
+            } else if let presentedController = viewController.presentedViewController {
+                setOrientationMask(mask, for: presentedController)
+            } else {
+                // Используем нотификации для запроса изменения ориентации
+                NotificationCenter.default.post(
+                    name: UIDevice.orientationDidChangeNotification,
+                    object: nil
+                )
+            }
         }
     }
 } 
