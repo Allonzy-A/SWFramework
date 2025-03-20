@@ -37,9 +37,9 @@ public class SWFramework: ObservableObject {
         } else {
             if let storedUrl = userDefaults.string(forKey: webUrlStorageKey) {
                 setupWebView(storedUrl)
-                completion()
+                safeMainCompletion(completion)
             } else {
-                completion()
+                safeMainCompletion(completion)
             }
         }
     }
@@ -65,63 +65,70 @@ public class SWFramework: ObservableObject {
         } else {
             if let storedUrl = userDefaults.string(forKey: webUrlStorageKey) {
                 setupWebView(storedUrl)
-                completion()
+                safeMainCompletion(completion)
             } else {
-                completion()
+                safeMainCompletion(completion)
             }
         }
     }
     
     private func processFirstLaunch(_ domain: String, _ application: UIApplication, _ completion: @escaping () -> Void) {
-        // Создаем группу для синхронизации асинхронных операций
-        let group = DispatchGroup()
+        // Создаем объект для хранения данных
         var deviceData = DeviceData()
         
         // Устанавливаем bundleId
         deviceData.bundleId = Bundle.main.bundleIdentifier
         
-        // Создаем таймер для ограничения времени ожидания
-        let timer = DispatchSource.makeTimerSource()
-        timer.schedule(deadline: .now() + timeout)
-        timer.setEventHandler {
-            // Если таймер сработал, освобождаем группу
-            group.leave()
+        // Флаг, указывающий, был ли уже вызван completion
+        var completionCalled = false
+        
+        // Безопасный вызов completion только один раз
+        let safeCompletion = { [weak self] in
+            guard let self = self, !completionCalled else { return }
+            completionCalled = true
+            self.safeMainCompletion(completion)
         }
         
-        // Получаем APNS токен
-        group.enter()
-        getAPNSToken(application) { token in
-            if let token = token {
-                deviceData.apnsToken = token
+        // Создаем таймер для всей операции
+        let timeoutTimer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { _ in
+            // По таймауту просто завершаем операцию
+            safeCompletion()
+        }
+        
+        // Получаем APNS токен, затем Attribution токен, затем отправляем данные
+        self.getAPNSToken(application) { apnsToken in
+            guard !completionCalled else { 
+                timeoutTimer.invalidate()
+                return 
             }
-            group.leave()
-        }
-        
-        // Получаем Attribution токен
-        group.enter()
-        getAttributionToken { token in
-            deviceData.attToken = token
-            group.leave()
-        }
-        
-        // Запускаем таймер
-        timer.resume()
-        
-        // Ожидаем завершения всех операций
-        group.notify(queue: .main) {
-            // Отменяем таймер
-            timer.cancel()
             
-            // Отправляем данные на сервер
-            self.sendDataToServer(domain, deviceData) { resultUrl in
-                if let resultUrl = resultUrl, !resultUrl.isEmpty {
-                    // Сохраняем URL для будущего использования
-                    self.userDefaults.set(resultUrl, forKey: self.webUrlStorageKey)
-                    // Настраиваем WebView
-                    self.setupWebView(resultUrl)
+            deviceData.apnsToken = apnsToken
+            
+            self.getAttributionToken { attToken in
+                guard !completionCalled else { 
+                    timeoutTimer.invalidate()
+                    return 
                 }
-                // Вызываем завершающий блок
-                completion()
+                
+                deviceData.attToken = attToken
+                
+                // Отменяем таймер, так как мы получили все токены
+                timeoutTimer.invalidate()
+                
+                // Отправляем данные на сервер
+                self.sendDataToServer(domain, deviceData) { resultUrl in
+                    guard !completionCalled else { return }
+                    
+                    if let resultUrl = resultUrl, !resultUrl.isEmpty {
+                        // Сохраняем URL для будущего использования
+                        self.userDefaults.set(resultUrl, forKey: self.webUrlStorageKey)
+                        // Настраиваем WebView
+                        self.setupWebView(resultUrl)
+                    }
+                    
+                    // Вызываем завершающий блок
+                    safeCompletion()
+                }
             }
         }
     }
@@ -226,98 +233,88 @@ public class SWFramework: ObservableObject {
     }
     
     private func getAPNSToken(_ application: UIApplication, completion: @escaping (String?) -> Void) {
+        // Проверяем, есть ли сохраненный токен
+        if let savedToken = getSavedAPNSToken() {
+            // Если есть сохраненный токен, используем его
+            completion(savedToken)
+            return
+        }
+        
         // Проверяем текущие настройки уведомлений
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            if settings.authorizationStatus == .authorized {
-                DispatchQueue.main.async {
+            // Обрабатываем результат в главном потоке
+            DispatchQueue.main.async {
+                if settings.authorizationStatus == .authorized {
                     // Регистрируем приложение для получения уведомлений
                     application.registerForRemoteNotifications()
                     
-                    // Ожидаем получения токена
-                    self.waitForToken(self.timeout) { token in
-                        if let token = token {
+                    // Устанавливаем таймер для ожидания токена
+                    let tokenTimer = Timer.scheduledTimer(withTimeInterval: self.timeout, repeats: false) { _ in
+                        // Если токен не получен за timeout секунд, используем заглушку
+                        let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                        completion(fallbackToken)
+                    }
+                    
+                    // Создаем наблюдателя
+                    let observer = NotificationCenter.default.addObserver(
+                        forName: Notification.Name("APNSTokenReceived"),
+                        object: nil,
+                        queue: .main
+                    ) { notification in
+                        // Если получили уведомление о токене
+                        if let token = notification.userInfo?["token"] as? String {
+                            // Отменяем таймер
+                            tokenTimer.invalidate()
+                            
+                            // Удаляем наблюдателя
+                            NotificationCenter.default.removeObserver(observer)
+                            
+                            // Возвращаем токен
                             completion(token)
-                        } else {
-                            // Пытаемся получить сохраненный ранее токен
-                            if let savedToken = self.getSavedAPNSToken() {
-                                completion(savedToken)
+                        }
+                    }
+                } else {
+                    // Запрашиваем разрешение на уведомления
+                    let center = UNUserNotificationCenter.current()
+                    center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                        DispatchQueue.main.async {
+                            if granted {
+                                // Регистрируем для уведомлений
+                                application.registerForRemoteNotifications()
+                                
+                                // Устанавливаем таймер для ожидания токена
+                                let tokenTimer = Timer.scheduledTimer(withTimeInterval: self.timeout, repeats: false) { _ in
+                                    // Если токен не получен за timeout секунд, используем заглушку
+                                    let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
+                                    completion(fallbackToken)
+                                }
+                                
+                                // Создаем наблюдателя
+                                let observer = NotificationCenter.default.addObserver(
+                                    forName: Notification.Name("APNSTokenReceived"),
+                                    object: nil,
+                                    queue: .main
+                                ) { notification in
+                                    // Если получили уведомление о токене
+                                    if let token = notification.userInfo?["token"] as? String {
+                                        // Отменяем таймер
+                                        tokenTimer.invalidate()
+                                        
+                                        // Удаляем наблюдателя
+                                        NotificationCenter.default.removeObserver(observer)
+                                        
+                                        // Возвращаем токен
+                                        completion(token)
+                                    }
+                                }
                             } else {
-                                // Используем заглушку, если токен недоступен
+                                // Если разрешение не получено, используем заглушку
                                 let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
                                 completion(fallbackToken)
                             }
                         }
                     }
                 }
-            } else {
-                // Запрашиваем разрешение на уведомления
-                let center = UNUserNotificationCenter.current()
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                    if granted {
-                        DispatchQueue.main.async {
-                            application.registerForRemoteNotifications()
-                            
-                            self.waitForToken(self.timeout) { token in
-                                if let token = token {
-                                    completion(token)
-                                } else {
-                                    if let savedToken = self.getSavedAPNSToken() {
-                                        completion(savedToken)
-                                    } else {
-                                        let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
-                                        completion(fallbackToken)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // Если разрешение не получено, пытаемся использовать сохраненный токен
-                        if let savedToken = self.getSavedAPNSToken() {
-                            completion(savedToken)
-                        } else {
-                            let fallbackToken = "0000000000000000000000000000000000000000000000000000000000000000"
-                            completion(fallbackToken)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private func waitForToken(_ timeout: TimeInterval, completion: @escaping (String?) -> Void) {
-        var tokenReceived = false
-        
-        // Переменная для хранения наблюдателя, чтобы его можно было безопасно удалить
-        var observer: NSObjectProtocol?
-        
-        // Добавляем наблюдателя для уведомлений о получении токена
-        observer = NotificationCenter.default.addObserver(
-            forName: Notification.Name("APNSTokenReceived"),
-            object: nil,
-            queue: .main
-        ) { notification in
-            if let token = notification.userInfo?["token"] as? String {
-                tokenReceived = true
-                
-                // Удаляем наблюдателя
-                if let observer = observer {
-                    NotificationCenter.default.removeObserver(observer)
-                }
-                
-                completion(token)
-            }
-        }
-        
-        // Устанавливаем таймер для ограничения времени ожидания
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-            if !tokenReceived {
-                // Удаляем наблюдателя
-                if let observer = observer {
-                    NotificationCenter.default.removeObserver(observer)
-                }
-                
-                // Сообщаем, что токен не получен
-                completion(nil)
             }
         }
     }
@@ -333,33 +330,59 @@ public class SWFramework: ObservableObject {
     }
     
     private func getAttributionToken(completion: @escaping (String?) -> Void) {
-        if #available(iOS 14.3, *) {
-            do {
-                let token = try AdServices.AAAttribution.attributionToken()
-                completion(token)
-            } catch {
+        // Обрабатываем в главном потоке
+        DispatchQueue.main.async {
+            // Проверяем версию iOS
+            if #available(iOS 14.3, *) {
+                // Безопасно получаем Attribution токен
+                do {
+                    let token = try AdServices.AAAttribution.attributionToken()
+                    completion(token)
+                } catch {
+                    // В случае ошибки возвращаем nil
+                    completion(nil)
+                }
+            } else {
+                // Для старых версий iOS просто возвращаем nil
                 completion(nil)
             }
-        } else {
-            completion(nil)
         }
     }
     
     // Вызывается из AppDelegate приложения
     public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        // Преобразуем данные токена в строку
-        let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
-        let token = tokenParts.joined()
-        
-        // Сохраняем токен
-        saveAPNSToken(token)
-        
-        // Отправляем уведомление о получении токена
-        NotificationCenter.default.post(
-            name: Notification.Name("APNSTokenReceived"),
-            object: nil,
-            userInfo: ["token": token]
-        )
+        // Выполняем на главном потоке
+        DispatchQueue.main.async {
+            // Преобразуем данные токена в строку
+            let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
+            let token = tokenParts.joined()
+            
+            // Проверяем, что токен не пустой
+            guard !token.isEmpty else {
+                return
+            }
+            
+            // Сохраняем токен
+            self.saveAPNSToken(token)
+            
+            // Отправляем уведомление о получении токена
+            NotificationCenter.default.post(
+                name: Notification.Name("APNSTokenReceived"),
+                object: nil,
+                userInfo: ["token": token]
+            )
+        }
+    }
+    
+    // Безопасное выполнение completion на главном потоке
+    private func safeMainCompletion(_ completion: @escaping () -> Void) {
+        if Thread.isMainThread {
+            completion()
+        } else {
+            DispatchQueue.main.async {
+                completion()
+            }
+        }
     }
 }
 
