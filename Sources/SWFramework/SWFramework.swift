@@ -184,7 +184,7 @@ public class SWFramework: ObservableObject {
         
         DispatchQueue.main.async {
             // Настраиваем полноэкранный режим и черный фон
-            configureFullScreenDisplay()
+            self.configureFullScreenDisplay()
             
             self.currentUrl = url
             self.showWebView = true
@@ -454,12 +454,12 @@ public struct SWWebView: View {
                         WebViewWrapper(url: url)
                     }
                 }
-                .statusBarHidden(true)
+                .modifier(StatusBarModifiers.StatusBarHiddenModifier(isHidden: true))
                 .transition(.opacity)
                 .animation(.easeInOut, value: true)
             }
         }
-        .statusBarHidden(framework.showWebView)
+        .modifier(StatusBarModifiers.StatusBarHiddenModifier(isHidden: framework.showWebView))
     }
 }
 
